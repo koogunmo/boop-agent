@@ -12,13 +12,52 @@ type ToolBrand = {
 const TOOL_BRANDS: ToolBrand[] = [
   { key: "gmail", displayName: "Gmail", domain: "mail.google.com", aliases: ["gmail"] },
   {
-    key: "google-calendar",
+    key: "googlecalendar",
     displayName: "Google Calendar",
     domain: "calendar.google.com",
-    aliases: ["google-calendar", "googlecalendar"],
+    aliases: ["googlecalendar", "google-calendar"],
+  },
+  {
+    key: "googledrive",
+    displayName: "Google Drive",
+    domain: "drive.google.com",
+    aliases: ["googledrive", "google-drive"],
+  },
+  {
+    key: "googlesheets",
+    displayName: "Google Sheets",
+    domain: "sheets.google.com",
+    aliases: ["googlesheets", "google-sheets"],
+  },
+  {
+    key: "googledocs",
+    displayName: "Google Docs",
+    domain: "docs.google.com",
+    aliases: ["googledocs", "google-docs"],
   },
   { key: "slack", displayName: "Slack", domain: "slack.com", aliases: ["slack"] },
   { key: "notion", displayName: "Notion", domain: "notion.so", aliases: ["notion"] },
+  { key: "github", displayName: "GitHub", domain: "github.com", aliases: ["github"] },
+  { key: "linear", displayName: "Linear", domain: "linear.app", aliases: ["linear"] },
+  { key: "hubspot", displayName: "HubSpot", domain: "hubspot.com", aliases: ["hubspot"] },
+  {
+    key: "salesforce",
+    displayName: "Salesforce",
+    domain: "salesforce.com",
+    aliases: ["salesforce"],
+  },
+  { key: "discord", displayName: "Discord", domain: "discord.com", aliases: ["discord"] },
+  { key: "twitter", displayName: "Twitter", domain: "twitter.com", aliases: ["twitter", "x"] },
+  { key: "linkedin", displayName: "LinkedIn", domain: "linkedin.com", aliases: ["linkedin"] },
+  { key: "trello", displayName: "Trello", domain: "trello.com", aliases: ["trello"] },
+  { key: "asana", displayName: "Asana", domain: "asana.com", aliases: ["asana"] },
+  { key: "jira", displayName: "Jira", domain: "atlassian.com", aliases: ["jira"] },
+  { key: "airtable", displayName: "Airtable", domain: "airtable.com", aliases: ["airtable"] },
+  { key: "figma", displayName: "Figma", domain: "figma.com", aliases: ["figma"] },
+  { key: "dropbox", displayName: "Dropbox", domain: "dropbox.com", aliases: ["dropbox"] },
+  { key: "stripe", displayName: "Stripe", domain: "stripe.com", aliases: ["stripe"] },
+  { key: "supabase", displayName: "Supabase", domain: "supabase.com", aliases: ["supabase"] },
+  { key: "granola", displayName: "Granola", domain: "granola.ai", aliases: ["granola", "granola_mcp"] },
   { key: "imessage", displayName: "iMessage", domain: "apple.com", aliases: ["imessage", "messages"] },
 ];
 
@@ -149,10 +188,12 @@ function getBoopToolIcon(raw?: string | null): ((s: number) => ReactNode) | null
 
 export function IntegrationLogo({
   raw,
+  logoUrl,
   size = 18,
   className = "",
 }: {
   raw?: string | null;
+  logoUrl?: string | null;
   size?: number;
   className?: string;
 }) {
@@ -161,46 +202,50 @@ export function IntegrationLogo({
   const [failed, setFailed] = useState(false);
   const style = { width: size, height: size };
   const radius = Math.max(4, Math.round(size * 0.28));
+  const iconSize = Math.max(12, Math.round(size * 0.72));
 
-  if (!brand || failed) {
-    if (boopIcon) {
-      const iconSize = Math.max(12, Math.round(size * 0.72));
-      return (
-        <span
-          className={`inline-flex shrink-0 items-center justify-center overflow-hidden bg-violet-500/10 text-violet-400 ${className}`}
-          style={{ ...style, borderRadius: radius, border: "0.5px solid rgba(139,92,246,0.25)" }}
-        >
-          {boopIcon(iconSize)}
-        </span>
-      );
-    }
+  // Prefer an explicit URL (e.g. Composio's branded toolkit logo) over favicon-by-domain.
+  const imgSrc = !failed && logoUrl ? logoUrl : !failed && brand ? faviconUrl(brand.domain) : null;
+
+  if (imgSrc) {
     return (
       <span
-        className={`inline-flex shrink-0 items-center justify-center overflow-hidden bg-slate-500/10 text-slate-400 ${className}`}
-        style={{ ...style, borderRadius: radius, border: "0.5px solid rgba(148,163,184,0.25)" }}
+        className={`inline-flex shrink-0 items-center justify-center overflow-hidden bg-white/95 ${className}`}
+        style={{ ...style, borderRadius: radius, border: "0.5px solid rgba(148,163,184,0.2)" }}
       >
-        <span className="text-[10px] font-semibold leading-none">
-          {(raw ?? "?").trim().charAt(0).toUpperCase() || "?"}
-        </span>
+        <img
+          src={imgSrc}
+          alt={brand?.displayName ?? raw ?? "integration"}
+          width={iconSize}
+          height={iconSize}
+          className="block object-contain"
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      </span>
+    );
+  }
+
+  if (boopIcon) {
+    return (
+      <span
+        className={`inline-flex shrink-0 items-center justify-center overflow-hidden bg-violet-500/10 text-violet-400 ${className}`}
+        style={{ ...style, borderRadius: radius, border: "0.5px solid rgba(139,92,246,0.25)" }}
+      >
+        {boopIcon(iconSize)}
       </span>
     );
   }
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center overflow-hidden bg-white/95 ${className}`}
-      style={{ ...style, borderRadius: radius, border: "0.5px solid rgba(148,163,184,0.2)" }}
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden bg-slate-500/10 text-slate-400 ${className}`}
+      style={{ ...style, borderRadius: radius, border: "0.5px solid rgba(148,163,184,0.25)" }}
     >
-      <img
-        src={faviconUrl(brand.domain)}
-        alt={brand.displayName}
-        width={Math.max(12, Math.round(size * 0.72))}
-        height={Math.max(12, Math.round(size * 0.72))}
-        className="block object-contain"
-        loading="lazy"
-        decoding="async"
-        onError={() => setFailed(true)}
-      />
+      <span className="text-[10px] font-semibold leading-none">
+        {(raw ?? "?").trim().charAt(0).toUpperCase() || "?"}
+      </span>
     </span>
   );
 }

@@ -9,7 +9,7 @@ An iMessage-based personal agent built on top of the [Claude Agent SDK](https://
 📺 **Watch the walkthrough:** [YouTube — How I built Boop](https://www.youtube.com/watch?v=3Rc4MlMJMNU)
 
 > **This is a starting point, not a finished product.**
-> It's the architecture I built for my own personal agent, opened up as a template so you can take it, text-enable your own Claude, and extend it however you want. The repo ships with example integrations (Gmail, Calendar, Notion, Slack) that are **commented out by default** — so first-run works with zero setup and you opt into tools as you need them.
+> It's the architecture I built for my own personal agent, opened up as a template so you can take it, text-enable your own Claude, and extend it however you want. Integrations are plugged in via [Composio](https://composio.dev) — drop in an API key and connect Gmail, Slack, GitHub, Linear, Notion, and ~1000 others straight from the debug dashboard.
 
 ```
  iMessage  →  Sendblue webhook  →  Interaction agent  →  Sub-agents (per task)
@@ -20,6 +20,7 @@ An iMessage-based personal agent built on top of the [Claude Agent SDK](https://
 
 Built on:
 - [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript) — the loop, tool use, sub-agents, MCP
+- [Composio](https://composio.dev) — integrations layer. One API key = Gmail, Slack, GitHub, Linear, Notion, Stripe, Supabase, + ~1000 more with hosted OAuth
 - [Sendblue](https://sendblue.co) — iMessage in/out (free on their agent plan)
 - [Convex](https://convex.dev) — real-time database for memory, agents, drafts
 - Your [Claude Code](https://claude.com/code) subscription — no separate Anthropic API key required
@@ -47,9 +48,7 @@ Built on:
 - **Automations** — the agent can schedule recurring work from a text ("every morning at 8 summarize my calendar") and push results back to iMessage.
 - **Draft-and-send** — any external action stages a draft first; the agent only commits when the user confirms.
 - **Heartbeat + retry** — stuck agents auto-fail, debug dashboard can retry.
-- **OAuth flow** — connect Google and Slack with a click from the debug UI, tokens stored in Convex.
-- **Integrations as MCP servers** — drop a folder into `/integrations/`, register it, your agent can use it.
-- **Four working examples (off by default)**: Google Calendar, Gmail, Notion, Slack.
+- **Composio-powered integrations** — one API key unlocks 1000+ toolkits. Connect Gmail, Slack, GitHub, Linear, Notion, Drive, HubSpot, etc. with a click from the debug dashboard. Composio handles OAuth + token refresh.
 - **Debug dashboard** (React + Vite) with a Boop mascot — Dashboard (spend + tokens + agent status), Agents (timeline + integration logos), Automations, Memory (table + force-directed graph), Events, Connections.
 - **Convex** for persistence — real-time, typed, free tier.
 - **Uses your Claude Code subscription** — no separate Anthropic API key required.
@@ -65,9 +64,12 @@ You need accounts for these. Keep the tabs open — setup will ask for credentia
 | [Claude Code](https://claude.com/code) | Powers the agent. Install it, sign in once, the SDK uses your session. | Subscription required |
 | [Sendblue](https://sendblue.co) | iMessage bridge. Get a number, grab API keys. | Free on their agent plan |
 | [Convex](https://convex.dev) | Database + realtime. | Free tier is plenty |
+| [Composio](https://composio.dev) | Integrations — one API key unlocks ~1000 toolkits. Optional if you just want chat + memory + automations without third-party access. | Free tier covers personal use |
 | [ngrok](https://ngrok.com) or similar | Expose your local port so Sendblue can reach it. | Free tier works |
 
-Integrations are **off by default**. First-run gives you a plain chat agent with memory + automations. Enable what you want when you want — see the table further down.
+Integrations are **opt-in**. First-run without a Composio key gives you a plain chat agent with memory + automations. Drop in `COMPOSIO_API_KEY` and connect toolkits from the Debug UI whenever you want more.
+
+**Custom integrations welcome.** Composio covers the common catalog, but you're free to add your own MCP servers under `server/integrations/` and register them in `server/integrations/registry.ts` — the dispatcher treats them the same as Composio-backed ones (just named toolkits the execution agent can spawn against). Useful for in-house APIs, local tools, or anything Composio doesn't ship.
 
 ---
 
@@ -243,10 +245,10 @@ Visit `http://localhost:5173` for the debug dashboard (chat, agents, memory, eve
 ```
 
 - **Interaction agent** (`server/interaction-agent.ts`) is the front door. It reads the user's message + recent history, optionally calls `recall`, writes memories, creates automations, and decides whether to answer directly or spawn a sub-agent.
-- **Execution agent** (`server/execution-agent.ts`) is spawned per task. It loads only the integrations it needs and returns a tight answer.
+- **Execution agent** (`server/execution-agent.ts`) is spawned per task. It loads only the integrations named in the spawn call and returns a tight answer.
 - **Memory** (`server/memory/`) handles writes, recall, post-turn extraction, and daily cleaning. Stored in Convex.
 - **Automations** (`server/automations.ts`) poll every 30s for due jobs, spawn an execution agent to run them, and push results back to the user.
-- **Integrations** (`/integrations/`) are MCP servers. The `google-calendar` and `notion` folders are working examples.
+- **Integrations** are provided by [Composio](https://composio.dev). The dispatcher names toolkits by slug (`spawn_agent(integrations: ["gmail"])`); `server/composio.ts` opens a toolkit-scoped Composio session per spawn and wraps its tools as an MCP server. No per-integration code to write.
 
 Deep dive: [ARCHITECTURE.md](./ARCHITECTURE.md). Adding your own tools: [INTEGRATIONS.md](./INTEGRATIONS.md).
 
@@ -275,44 +277,82 @@ Everything lives in `.env.local` (auto-created by `npm run setup`). See `.env.ex
 | `SENDBLUE_FROM_NUMBER` | yes | Your Sendblue-provisioned number. |
 | `BOOP_MODEL` | no | Default `claude-sonnet-4-6`. |
 | `PORT` | no | Default `3456`. |
-| `PUBLIC_URL` | no | Needed for OAuth callbacks and Sendblue webhook URL. |
+| `PUBLIC_URL` | no | Base URL used in the Sendblue webhook. Composio handles its own OAuth callbacks on `platform.composio.dev`, so this is just for inbound iMessage. |
 | `VOYAGE_API_KEY` **or** `OPENAI_API_KEY` | optional | Unlocks vector recall. Falls back to substring. |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | OAuth for Calendar + Gmail. Needed for "Connect Google" in the dashboard. |
-| `GOOGLE_REFRESH_TOKEN` | optional | Alternative to OAuth — static token for personal use. |
-| `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` | optional | OAuth for Slack. |
-| `SLACK_BOT_TOKEN` / `SLACK_USER_TOKEN` | optional | Alternative to OAuth — static tokens. |
-| `NOTION_TOKEN` | optional | Internal-integration token. |
+| `COMPOSIO_API_KEY` | optional | Enables integrations. Without it, plain chat + memory + automations still work. Get one at [app.composio.dev/developers](https://app.composio.dev/developers). |
+| `COMPOSIO_USER_ID` | optional | Stable user id Composio keys connections under. Defaults to `boop-default`. |
 | `ANTHROPIC_API_KEY` | optional | Bypass the Claude Code subscription. |
 
 ---
 
-## Turning on the example integrations
+## Integrations, via Composio
 
-Four examples ship disabled. To enable one:
+Boop outsources 3rd-party service integrations to [Composio](https://composio.dev). One API key unlocks ~1000 toolkits (Gmail, Slack, GitHub, Linear, Notion, Drive, Stripe, Supabase, HubSpot, Salesforce, Granola, and so on). Composio hosts the OAuth apps, manages token refresh, and exposes every toolkit as a set of Claude-ready tools. Boop never sees an access token.
 
-1. Open `server/integrations/registry.ts`.
-2. Uncomment its `import(...)` line in the `loaders` array.
-3. Add the env vars in `.env.local` — see each integration's README.
-4. Restart the server.
+### Quickstart
 
-| Integration | Required env | Docs |
-|---|---|---|
-| Google Calendar | `GOOGLE_REFRESH_TOKEN` + client id/secret **or** OAuth via the Connections tab | [integrations/google-calendar/README.md](./integrations/google-calendar/README.md) |
-| Gmail | same as Calendar (both ride the same Google OAuth) | [integrations/gmail/README.md](./integrations/gmail/README.md) |
-| Notion | `NOTION_TOKEN` (internal integration) | [integrations/notion/README.md](./integrations/notion/README.md) |
-| Slack | `SLACK_BOT_TOKEN` **or** OAuth via the Connections tab | [integrations/slack/README.md](./integrations/slack/README.md) |
+1. Grab an API key at [app.composio.dev/developers](https://app.composio.dev/developers).
+2. Add it to `.env.local`:
+   ```
+   COMPOSIO_API_KEY=sk-comp-...
+   ```
+3. `npm run dev`.
+4. Open the debug dashboard → **Connections** tab. You'll see a curated list of ~20 cards split into:
+   - **Ready to connect** — Composio manages the OAuth app. Click **Connect**, authenticate on Composio's hosted page, done.
+   - **Needs one-time auth config** — a few toolkits (Twitter/X, LinkedIn, Salesforce) require you to register your own OAuth app on their dev portal and paste the client ID/secret into `platform.composio.dev/auth-configs`. The card's **Set up →** link takes you straight there. Once registered, the card flips to Ready.
 
-## Adding your own integration
+After a successful connect, the agent can use that toolkit immediately — no restart.
 
-Copy the skeleton:
+### How it wires in
 
-```bash
-cp -r integrations/_template integrations/my-thing
-# edit integrations/my-thing/index.ts — rename, add tools, uncomment opts.registerIntegration(mod)
-# then add import("../../integrations/my-thing/index.js") to loaders[] in server/integrations/registry.ts
+Boop keeps the dispatcher / executor split intact. Composio sits under the executor:
+
+```
+interaction-agent:  spawn_agent(task, integrations: ["gmail", "slack"])
+                              │
+                              ▼
+execution-agent:    for each slug, open a Composio session scoped to that toolkit:
+                      composio.create(BOOP_USER, { toolkits: ["gmail"] })
+                      session.tools()          ← returns only Gmail tools
+                              │
+                              ▼
+                    createSdkMcpServer({ name: "gmail", tools })
+                              │
+                              ▼
+                    Sub-agent sees mcp__gmail__GMAIL_*  — nothing else.
 ```
 
-Each integration is an MCP server. Each `tool(name, description, schema, handler)` call becomes a callable the sub-agent can use. Tool descriptions are the spec — the model reads them to choose when to call what. Full guide: [INTEGRATIONS.md](./INTEGRATIONS.md).
+Key properties:
+
+- **Per-spawn tool scope.** The dispatcher picks which toolkits the sub-agent sees. Tens of tools per spawn, not thousands, so context stays tight and the agent stays fast.
+- **Toolkit slug = integration name.** `spawn_agent(integrations: ["linear"])` works for any toolkit you've connected. Unknown slugs just log a warning and are skipped.
+- **No tokens on our side.** Every tool call runs through Composio's proxy. If Composio goes down, integrations go down — but your server never holds user OAuth tokens.
+- **Multi-account per toolkit.** Connect a second Gmail (work + personal) — each gets its own connection row you can alias. The dispatcher picks up all active connections for the slug.
+- **Identity resolution.** Connection cards show the real account email (e.g. `chris@aloa.co`) resolved by calling the toolkit's own "who am I" tool through Composio (`GMAIL_GET_PROFILE`, etc.). Alias per connection if you want a friendlier label.
+
+### Adding toolkits beyond the curated list
+
+The ~20 toolkit catalog is hand-picked in `server/composio.ts:CURATED_TOOLKITS`. To surface another:
+
+```ts
+// server/composio.ts
+export const CURATED_TOOLKITS: CuratedToolkit[] = [
+  // …existing entries…
+  { slug: "airtable", displayName: "Airtable", authMode: "managed" },
+];
+```
+
+`authMode: "managed"` is correct for most toolkits. Use `"byo"` only if you know Composio requires a custom OAuth app (Twitter/LinkedIn/Salesforce-style). If you guess wrong, the UI's auth-config fallback banner catches it and points you at the right dashboard page.
+
+### Cost tracking
+
+Every execution agent's `total_cost_usd` comes straight from the Claude Agent SDK's `result` message (authoritative, matches Anthropic's billing). You'll see real dollar amounts in the Dashboard tab's Cost tile and per-agent cards.
+
+### Keeping it in sync
+
+Deeper dive — auth modes, toolkit scoping internals, multi-account flow, per-connection identity: [INTEGRATIONS.md](./INTEGRATIONS.md).
+
+Upgrade path when upstream ships changes: run `/upgrade-boop` inside `claude` (the skill under `.claude/skills/upgrade-boop/`) — previews diffs, backs up, merges, surfaces `[BREAKING]` CHANGELOG entries. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the "skills, not features" model.
 
 ---
 
@@ -331,7 +371,8 @@ boop-agent/
 │   ├── heartbeat.ts               # Stale-agent sweep
 │   ├── consolidation.ts           # Proposer + judge pipeline
 │   ├── embeddings.ts              # Voyage / OpenAI wrapper
-│   ├── oauth.ts                   # OAuth routes for Google + Slack
+│   ├── composio.ts                # Composio SDK wrapper (session + toolkit scoping)
+│   ├── composio-routes.ts         # /composio/* HTTP routes for the Debug UI
 │   ├── broadcast.ts               # WS fanout
 │   ├── convex-client.ts           # Convex HTTP client
 │   ├── memory/
@@ -340,21 +381,15 @@ boop-agent/
 │   │   ├── extract.ts             # Post-turn extraction
 │   │   └── clean.ts               # Decay + archive + prune
 │   └── integrations/
-│       └── registry.ts            # Integration loader
-├── integrations/
-│   ├── _template/                 # Copy this to add your own
-│   ├── google-calendar/
-│   ├── gmail/
-│   ├── notion/
-│   └── slack/
+│       ├── registry.ts            # Integration loader
+│       └── composio-loader.ts     # Registers each connected Composio toolkit
 ├── convex/
-│   ├── schema.ts                  # 7 tables
+│   ├── schema.ts
 │   ├── messages.ts
 │   ├── memoryRecords.ts
 │   ├── agents.ts
 │   ├── automations.ts
 │   ├── consolidation.ts
-│   ├── connections.ts
 │   ├── conversations.ts
 │   ├── drafts.ts
 │   ├── memoryEvents.ts
@@ -373,6 +408,53 @@ boop-agent/
 
 ---
 
+## Upgrading
+
+Boop is a fork-and-own template. You customize your copy freely — system prompts, memory thresholds, extra tools — and pull upstream fixes in on your own schedule.
+
+The intended path is **Claude Code-driven**, modeled on NanoClaw:
+
+```bash
+claude                 # inside your repo
+/upgrade-boop
+```
+
+`/upgrade-boop` is a skill in `.claude/skills/upgrade-boop/SKILL.md`. It:
+
+1. Refuses to run with a dirty working tree.
+2. Creates a timestamped rollback tag.
+3. Previews upstream changes bucketed by area (core / integrations / UI / schema / scripts / docs).
+4. Merges (or cherry-picks, or rebases — your choice).
+5. Runs `npm install` + `npm run typecheck`.
+6. Parses `CHANGELOG.md` for `[BREAKING]` entries and offers to run the referenced migration skills.
+7. Prints a rollback hash + any env-var additions you should copy into `.env.local`.
+
+Plain git works too, if you'd rather:
+
+```bash
+git remote add upstream https://github.com/chris/boop-agent.git    # one-time
+git fetch upstream
+git merge upstream/main      # or: git rebase upstream/main
+```
+
+### How features are added
+
+Features don't land in the base. They ship as **Claude Code skills** that transform your fork on demand:
+
+```
+/add-<feature>     # opts your fork into a feature
+/customize         # small tuning changes
+/debug             # diagnose issues in your installed copy
+```
+
+Skill list grows as contributors add them. Base stays small. See `CONTRIBUTING.md` for the "skills, not features" policy.
+
+### CHANGELOG
+
+Every release lists additions under [CHANGELOG.md](./CHANGELOG.md), with `[BREAKING]` prefixes for anything that requires action. `/upgrade-boop` parses that format automatically.
+
+---
+
 ## Troubleshooting
 
 **Agent doesn't reply.**
@@ -387,9 +469,9 @@ boop-agent/
 - `CONVEX_DEPLOYMENT` and `CONVEX_URL` in `.env.local` are pointing at different projects. `convex dev` pushes functions to `CONVEX_DEPLOYMENT` but the client reads from `CONVEX_URL`. Fix: make sure the URL has the same name as the deployment — `CONVEX_DEPLOYMENT=dev:foo-bar-123` → `CONVEX_URL=https://foo-bar-123.convex.cloud`. Re-running `npm run setup` now auto-syncs these.
 
 **Agent replies but can't use my integration.**
-- Check it's registered — `server/integrations/registry.ts` imports list.
-- Check the `register()` function actually calls `opts.registerIntegration(mod)` (not commented out).
-- Check required env vars are set. Tools return an auth error if the token is missing.
+- Check `COMPOSIO_API_KEY` is set in `.env.local`.
+- Check the toolkit shows as **Connected** in the Connections tab.
+- Watch server logs for `[composio] registered …` at boot and `[integrations] unknown integration: …` on spawn attempts.
 
 **I want to skip Sendblue for now.**
 - The server exposes `POST /chat` with `{ conversationId, content }` — curl or a tiny client can drive the agent directly, no iMessage required.
