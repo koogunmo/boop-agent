@@ -131,9 +131,18 @@ export const search = query({
   handler: async (ctx, args) => {
     const limit = args.limit ?? 20;
     const q = args.query.toLowerCase();
-    const all = await ctx.db.query("memoryRecords").take(500);
-    return all
-      .filter((m) => m.lifecycle === "active" && m.content.toLowerCase().includes(q))
+    // Filter on the index BEFORE the 500 cap — otherwise archived/pruned
+    // records eat the budget and silently truncate the active set.
+    // order("desc") so the 500-cap favors recent records. Without it the
+    // index iterates oldest-first and a brand-new high-importance record
+    // past position 500 would never be seen.
+    const active = await ctx.db
+      .query("memoryRecords")
+      .withIndex("by_lifecycle", (idx) => idx.eq("lifecycle", "active"))
+      .order("desc")
+      .take(500);
+    return active
+      .filter((m) => m.content.toLowerCase().includes(q))
       .sort((a, b) => b.importance - a.importance)
       .slice(0, limit);
   },
@@ -168,10 +177,12 @@ export const setLifecycle = mutation({
   },
 });
 
+const COUNTS_SCAN_LIMIT = 5000;
+
 export const countsByTier = query({
   args: {},
   handler: async (ctx) => {
-    const all = await ctx.db.query("memoryRecords").collect();
+    const all = await ctx.db.query("memoryRecords").order("desc").take(COUNTS_SCAN_LIMIT);
     const active = all.filter((m) => m.lifecycle === "active");
     return {
       short: active.filter((m) => m.tier === "short").length,
@@ -179,6 +190,8 @@ export const countsByTier = query({
       permanent: active.filter((m) => m.tier === "permanent").length,
       archived: all.filter((m) => m.lifecycle === "archived").length,
       pruned: all.filter((m) => m.lifecycle === "pruned").length,
+      truncated: all.length === COUNTS_SCAN_LIMIT,
+      scanLimit: COUNTS_SCAN_LIMIT,
     };
   },
 });
