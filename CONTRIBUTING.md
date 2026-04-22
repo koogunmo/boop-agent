@@ -1,83 +1,61 @@
 # Contributing
 
-Boop is a small template, not a generic framework. The codebase stays tight because most extensions happen on your fork, not in the base.
+Boop is a small personal-agent template. The codebase stays tight because that's the whole point — it should be small enough to read cover-to-cover in an afternoon and fork without fear.
 
-## Philosophy
+## What lands in source
 
-The base should do one thing well: text an agent, spawn sub-agents, remember, run automations, connect integrations via Composio. Everything else is opt-in per fork.
+- Bug fixes
+- Security fixes
+- Simplifications (less code doing the same thing)
+- Clear improvements to core behavior — memory decay tuning, consolidation robustness, dispatcher policy, cost tracking, etc.
+- New channels, integrations, or runtime skills if they fit the template spirit (small, opinionated, well-scoped)
 
-**Source code changes that are accepted:**
-- Bug fixes.
-- Security fixes.
-- Simplifications (less code doing the same thing).
-- Clear improvements to core behaviour (memory decay tuning, consolidation robustness, dispatcher policy refinements).
-
-**Not accepted as source code:**
-- New features.
-- New integrations (those live in Composio's catalog — no code change needed).
-- Optional capabilities (alternative models, specialized UIs, extra channels).
-
-Those go in as **skills** instead.
-
-## Skills, not features
-
-Feature additions ship as Claude Code skills in `.claude/skills/<name>/`. A user opts in with `/<name>` inside `claude`, and the skill transforms their fork. This keeps the base minimal and lets each user end up with exactly the code they want.
-
-Two skill shapes are common:
-
-### Branch-based feature skill
-
-The skill's `SKILL.md` tells Claude to fetch + merge a `skill/<name>` branch that carries the actual code.
-
-- `.claude/skills/<name>/SKILL.md` — instructions, merge + setup steps.
-- `skill/<name>` branch (managed by maintainers after your PR is merged to `main`) — the code.
-
-Good for: new channels, alternative runtimes, optional UI panels.
-
-### Instruction-only skill
-
-Pure `SKILL.md` with no branch — Claude reads it and executes the described edits directly.
-
-Good for: small customizations, tuning knobs, migration helpers.
-
-See `.claude/skills/upgrade-boop/SKILL.md` for a canonical example.
-
-## Writing a skill
-
-1. Fork, branch from `main`.
-2. Create `.claude/skills/<name>/SKILL.md` with frontmatter:
-   ```yaml
-   ---
-   name: <name>
-   description: <one-sentence trigger description — what this skill does>
-   ---
-   ```
-3. Body: operating principles, step-by-step instructions for Claude Code.
-4. If code changes are needed: put them on a `skill/<name>` branch and reference it in the SKILL.md's merge step.
-5. If the skill migrates existing state: parse `CHANGELOG.md` for the `[BREAKING]` entry that triggered it, so it's idempotent.
-6. Open a PR with `SKILL.md` (+ the code branch if applicable).
+Keep the diff focused — one concern per PR. A feature PR and a refactor PR should be two PRs.
 
 ## Bug-fix PRs
 
-- Keep the diff tight — one fix per PR.
-- Update `CHANGELOG.md` under **Unreleased** with a one-liner.
-- If the fix changes external behaviour (env vars, schema, routes), mark the CHANGELOG entry `[BREAKING]` and name the migration skill users should run.
+- One fix per PR.
+- Update `CHANGELOG.md` under **Unreleased** with a one-line entry.
+- If the fix changes external behavior (env vars, Convex schema, HTTP routes, webhook shapes), mark the CHANGELOG entry `[BREAKING]` — see conventions below.
 
 ## CHANGELOG conventions
 
 - Entries live under **Unreleased** until a release cut.
-- Prefix actionable changes with `[BREAKING]` and include `` `/skill-name` `` to reference the migration.
-- Format: `[BREAKING] <description>. Run \`/<skill-name>\` to <action>.`
+- Prefix user-actionable changes with `[BREAKING]`.
+- If a breaking change needs a migration (backfill, env var rename, schema transform), ship a **migration skill** at `.claude/skills/<name>/SKILL.md` that Claude can run against a user's fork, and reference it in the CHANGELOG:
 
-`/upgrade-boop` parses this format to surface breaking changes and offer to run the referenced skills.
+  ```
+  [BREAKING] <description>. Run `/<skill-name>` to <action>.
+  ```
 
-## What doesn't go in the base
+  `/upgrade-boop` parses this format and offers to run the referenced skill during upgrades. The format is the only coupling — without a migration, just write `[BREAKING] <description>.` without the skill reference.
 
-Skip proposing these — they belong in skills or forks:
+## Skills
 
-- New Composio toolkits in `CURATED_TOOLKITS` (keep the list intentionally short; users can paste arbitrary slugs anyway in future work).
-- Alternative message channels (SMS provider A, iMessage alternative B, Telegram, etc).
-- Specialized dashboards or visualizations beyond the current panels.
-- Hosted / multi-tenant functionality.
+Two kinds of skills live in `.claude/skills/`:
 
-Hosted/multi-tenant is an architectural fork, not a feature flag — better as its own project.
+**Migration skills** — instruction-only `SKILL.md` triggered by `[BREAKING]` CHANGELOG entries during `/upgrade-boop`. Pure markdown, no branch, no supporting code. Example: `/upgrade-boop` itself is this shape.
+
+**Runtime skills** — `SKILL.md` loaded into the execution agent at spawn time via the Claude Agent SDK's `settingSources`. The model autonomously invokes them when a task matches the skill's `description`. Example: `.claude/skills/youtube-script-writer/`. See the **Skills** section in the README for wiring details.
+
+Both are just Markdown under `.claude/skills/<name>/SKILL.md` with YAML frontmatter. No branching model, no maintainer-owned sibling branches — features land directly on `main` like any normal project.
+
+## Writing a migration skill
+
+1. Fork, branch from `main`.
+2. Create `.claude/skills/<name>/SKILL.md`:
+   ```yaml
+   ---
+   name: <name>
+   description: One-line trigger description — when /upgrade-boop should offer this.
+   ---
+   ```
+3. Body: numbered operating steps Claude should execute. Lean on `git`, `npm`, file edits. Make the skill idempotent — a user running it twice should be safe.
+4. Add the matching `[BREAKING]` line to `CHANGELOG.md` under **Unreleased**.
+5. Open a PR with the code change + the SKILL.md + the CHANGELOG entry in one commit.
+
+## Writing a runtime skill
+
+1. Create `.claude/skills/<name>/SKILL.md` with a specific, trigger-rich `description` so the SDK's routing picks it up reliably.
+2. Body: the playbook the execution agent should follow when it invokes this skill.
+3. That's it — no server code changes needed. The execution agent already loads `.claude/skills/` via `settingSources: ["project"]`.

@@ -393,7 +393,7 @@ If you deploy Boop in a higher-throughput setting, or hand it integrations that 
 
 Deeper dive — auth modes, toolkit scoping internals, multi-account flow, per-connection identity: [INTEGRATIONS.md](./INTEGRATIONS.md).
 
-Upgrade path when upstream ships changes: run `/upgrade-boop` inside `claude` (the skill under `.claude/skills/upgrade-boop/`) — previews diffs, backs up, merges, surfaces `[BREAKING]` CHANGELOG entries. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the "skills, not features" model.
+Upgrade path when upstream ships changes: run `/upgrade-boop` inside `claude` (the skill under `.claude/skills/upgrade-boop/`) — previews diffs, backs up, merges, surfaces `[BREAKING]` CHANGELOG entries. See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution rules + the CHANGELOG / migration-skill conventions.
 
 ---
 
@@ -477,18 +477,6 @@ git remote add upstream https://github.com/chris/boop-agent.git    # one-time
 git fetch upstream
 git merge upstream/main      # or: git rebase upstream/main
 ```
-
-### How features are added
-
-Features don't land in the base. They ship as **Claude Code skills** that transform your fork on demand:
-
-```
-/add-<feature>     # opts your fork into a feature
-/customize         # small tuning changes
-/debug             # diagnose issues in your installed copy
-```
-
-Skill list grows as contributors add them. Base stays small. See `CONTRIBUTING.md` for the "skills, not features" policy.
 
 ### CHANGELOG
 
