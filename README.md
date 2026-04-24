@@ -1,16 +1,8 @@
-<table align="center">
-<tr>
-<td align="center" valign="middle">
+<p align="center">
   <img src="assets/boop.png" alt="Boop" width="220" />
-  <h1>Boop</h1>
-</td>
-<td align="center" valign="middle">
-  <img src="assets/luna.jpeg" alt="Luna" width="180" />
-  <br>
-  <sub><em>Name and mascot inspired by my dog Luna</em></sub>
-</td>
-</tr>
-</table>
+</p>
+
+# Boop
 
 An iMessage-based personal agent built on top of the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview).
 
@@ -41,6 +33,20 @@ Built on:
 - **Not optimized for cost or security.** Use at your own risk. Review the code, set your own budgets, and don't trust it with anything you wouldn't trust yourself with.
 - **I'm open to PRs for optimizations** — performance, bug fixes, DX improvements, new example integrations, better docs.
 - **Claude Agent SDK is load-bearing.** I won't merge PRs that swap it out or add workarounds to run non-Anthropic models. This template exists specifically to show what you can build on top of the SDK. If you want to run this against a different model or provider, please fork — I'll happily link to good forks from here.
+
+---
+
+## Why is it named Boop?
+
+<p align="center">
+  <img src="assets/luna.jpeg" alt="Luna" width="220" />
+  <br>
+  <sub><em>Luna, the inspiration.</em></sub>
+</p>
+
+Boop is meant to be a proactive agent — one that nudges you over iMessage with reminders, drafts, and little follow-ups. A small "boop" whenever it has something for you.
+
+And it's named after my dog, Luna, who gets plenty of them.
 
 ---
 
