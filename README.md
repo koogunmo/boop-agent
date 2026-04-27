@@ -62,12 +62,6 @@ I'm working on open-sourcing the native iOS app I originally built for this. The
 
 If you want to see what it looked like before I transitioned to an iMessage-based agent, here's [the walkthrough on YouTube](https://www.youtube.com/watch?v=_h2EnRfxMQE).
 
-<p align="center">
-  <video src="https://github.com/raroque/boop-agent/raw/main/assets/imessage-demo.mp4" controls width="320" muted playsinline></video>
-  <br>
-  <sub><em>Preview — Boop today over iMessage. The iOS rewrite picks up from here.</em></sub>
-</p>
-
 ---
 
 ## What you get
@@ -94,13 +88,19 @@ If you want to see what it looked like before I transitioned to an iMessage-base
 </p>
 
 <p align="center">
+  <img src="assets/automations.jpg" alt="Automations view in the Boop debug dashboard" width="900" />
+  <br>
+  <sub><em>Automations tab — schedule recurring jobs from a text ("every morning at 8 summarize my calendar") and watch them run.</em></sub>
+</p>
+
+<p align="center">
   <img src="assets/memory-graph.jpg" alt="Memory graph in the Boop debug dashboard" width="900" />
   <br>
   <sub><em>Memory tab — force-directed graph of clustered memories across short, long, and permanent tiers. Tabular view also available.</em></sub>
 </p>
 
 <p align="center">
-  <img src="assets/integrations.jpg" alt="Connections view in the Boop debug dashboard" width="900" />
+  <img src="assets/connections.jpg" alt="Connections view in the Boop debug dashboard" width="900" />
   <br>
   <sub><em>Connections tab — Composio toolkits with OAuth handled for you. Click Connect and the agent can use it on the next message.</em></sub>
 </p>
@@ -120,8 +120,6 @@ You need accounts for these. Keep the tabs open — setup will ask for credentia
 | [Convex](https://convex.link/chrisraroque) | Database + realtime. | Free tier is plenty | Working on getting one (in touch with them 👀) |
 | [Composio](https://composio.dev/?utm_source=chris&utm_medium=youtube&utm_campaign=collab) | Integrations — one API key unlocks ~1000 toolkits. Optional if you just want chat + memory + automations without third-party access. | Free tier covers personal use | `CHRISXCOMPOSIO` — 1 month free on starter plan |
 | [ngrok](https://ngrok.com?ref=chrisraroque) or similar | Expose your local port so Sendblue can reach it. | Free tier works | Working on getting one (if you work here, please reach out!) |
-
-Integrations are **opt-in**. First-run without a Composio key gives you a plain chat agent with memory + automations. Drop in `COMPOSIO_API_KEY` and connect toolkits from the Debug UI whenever you want more.
 
 **Custom integrations welcome.** Composio covers the common catalog, but you're free to add your own MCP servers under `server/integrations/` and register them in `server/integrations/registry.ts` — the dispatcher treats them the same as Composio-backed ones (just named toolkits the execution agent can spawn against). Useful for in-house APIs, local tools, or anything Composio doesn't ship.
 
