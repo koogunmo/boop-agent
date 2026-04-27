@@ -561,8 +561,8 @@ You can override with ANTHROPIC_API_KEY in .env.local if you'd rather use an API
 
     if (deploymentMatch) {
       const url =
-        after.CONVEX_URL ??
-        after.VITE_CONVEX_URL ??
+        after.CONVEX_URL ||
+        after.VITE_CONVEX_URL ||
         `https://${deploymentMatch[2]}.convex.cloud`;
       if (after.CONVEX_URL !== url || after.VITE_CONVEX_URL !== url) {
         writeEnv(ENV_PATH, {
