@@ -380,9 +380,7 @@ Boop outsources 3rd-party service integrations to [Composio](https://composio.de
    COMPOSIO_API_KEY=sk-comp-...
    ```
 3. `npm run dev`.
-4. Open the debug dashboard → **Connections** tab. You'll see a curated list of ~20 cards split into:
-   - **Ready to connect** — Composio manages the OAuth app. Click **Connect**, authenticate on Composio's hosted page, done.
-   - **Needs one-time auth config** — a few toolkits (Twitter/X, LinkedIn, Salesforce) require you to register your own OAuth app on their dev portal and paste the client ID/secret into `platform.composio.dev/auth-configs`. The card's **Set up →** link takes you straight there. Once registered, the card flips to Ready.
+4. Open the debug dashboard → **Connections** tab. You'll see a curated list of ~20 cards. For each one: click **Connect**, authenticate on Composio's hosted page, done — Composio ships managed OAuth for every curated toolkit. (If you add a custom toolkit that needs your own OAuth app, the card flips to a "Set up →" state pointing at `platform.composio.dev/auth-configs` — rare, but supported.)
 
 After a successful connect, the agent can use that toolkit immediately — no restart.
 
@@ -425,7 +423,7 @@ export const CURATED_TOOLKITS: CuratedToolkit[] = [
 ];
 ```
 
-`authMode: "managed"` is correct for most toolkits. Use `"byo"` only if you know Composio requires a custom OAuth app (Twitter/LinkedIn/Salesforce-style). If you guess wrong, the UI's auth-config fallback banner catches it and points you at the right dashboard page.
+`authMode: "managed"` is correct for virtually every toolkit Composio ships today. Use `"byo"` only if Composio doesn't have a hosted OAuth app for that toolkit. If you guess wrong, the UI's auth-config fallback banner catches it and points you at the right dashboard page.
 
 ### Cost tracking
 
