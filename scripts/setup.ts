@@ -317,7 +317,7 @@ What this does:
 Before you start:
   • A Claude Code subscription:    https://claude.com/code
   • Convex account (free tier):    https://convex.dev
-  • Sendblue (free on agent plan): https://sendblue.co
+  • Sendblue (free on agent plan): https://sendblue.com
 `);
 
   const existing = readEnv(ENV_PATH);
