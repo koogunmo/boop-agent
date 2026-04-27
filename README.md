@@ -8,6 +8,12 @@ An iMessage-based personal agent built on top of the [Claude Agent SDK](https://
 
 📺 **Watch the walkthrough:** [YouTube — How I built Boop](https://youtu.be/ZpmKjDDbqHs)
 
+<p align="center">
+  <img src="assets/imessage.jpg" alt="Boop replying inside iMessage" width="320" />
+  <br>
+  <sub><em>Boop in action — text it like a person, get back an answer with full context.</em></sub>
+</p>
+
 > **This is a starting point, not a finished product.**
 > It's the architecture I built for my own personal agent, opened up as a template so you can take it, text-enable your own Claude, and extend it however you want. Integrations are plugged in via [Composio](https://composio.dev/?utm_source=chris&utm_medium=youtube&utm_campaign=collab) — drop in an API key and connect Gmail, Slack, GitHub, Linear, Notion, and ~1000 others straight from the debug dashboard.
 
@@ -56,6 +62,12 @@ I'm working on open-sourcing the native iOS app I originally built for this. The
 
 If you want to see what it looked like before I transitioned to an iMessage-based agent, here's [the walkthrough on YouTube](https://www.youtube.com/watch?v=_h2EnRfxMQE).
 
+<p align="center">
+  <video src="https://github.com/raroque/boop-agent/raw/main/assets/imessage-demo.mp4" controls width="320" muted playsinline></video>
+  <br>
+  <sub><em>Preview — Boop today over iMessage. The iOS rewrite picks up from here.</em></sub>
+</p>
+
 ---
 
 ## What you get
@@ -74,6 +86,24 @@ If you want to see what it looked like before I transitioned to an iMessage-base
 - **Debug dashboard** (React + Vite) with a Boop mascot — Dashboard (spend + tokens + agent status), Agents (timeline + integration logos), Automations, Memory (table + force-directed graph), Events, Connections.
 - **Convex** for persistence — real-time, typed, free tier.
 - **Uses your Claude Code subscription** — no separate Anthropic API key required.
+
+<p align="center">
+  <img src="assets/agents-view.jpg" alt="Agents view in the Boop debug dashboard" width="900" />
+  <br>
+  <sub><em>Agents tab — every spawned sub-agent with status, cost, tokens, turns, runtime, and the integrations it touched.</em></sub>
+</p>
+
+<p align="center">
+  <img src="assets/memory-graph.jpg" alt="Memory graph in the Boop debug dashboard" width="900" />
+  <br>
+  <sub><em>Memory tab — force-directed graph of clustered memories across short, long, and permanent tiers. Tabular view also available.</em></sub>
+</p>
+
+<p align="center">
+  <img src="assets/integrations.jpg" alt="Connections view in the Boop debug dashboard" width="900" />
+  <br>
+  <sub><em>Connections tab — Composio toolkits with OAuth handled for you. Click Connect and the agent can use it on the next message.</em></sub>
+</p>
 
 ---
 
