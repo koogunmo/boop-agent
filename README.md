@@ -9,7 +9,7 @@ An iMessage-based personal agent built on top of the [Claude Agent SDK](https://
 📺 **Watch the walkthrough:** [YouTube — How I built Boop](https://www.youtube.com/watch?v=3Rc4MlMJMNU)
 
 > **This is a starting point, not a finished product.**
-> It's the architecture I built for my own personal agent, opened up as a template so you can take it, text-enable your own Claude, and extend it however you want. Integrations are plugged in via [Composio](https://composio.dev) — drop in an API key and connect Gmail, Slack, GitHub, Linear, Notion, and ~1000 others straight from the debug dashboard.
+> It's the architecture I built for my own personal agent, opened up as a template so you can take it, text-enable your own Claude, and extend it however you want. Integrations are plugged in via [Composio](https://composio.dev/?utm_source=chris&utm_medium=youtube&utm_campaign=collab) — drop in an API key and connect Gmail, Slack, GitHub, Linear, Notion, and ~1000 others straight from the debug dashboard.
 
 ```
  iMessage  →  Sendblue webhook  →  Interaction agent  →  Sub-agents (per task)
@@ -20,7 +20,7 @@ An iMessage-based personal agent built on top of the [Claude Agent SDK](https://
 
 Built on:
 - [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript) — the loop, tool use, sub-agents, MCP
-- [Composio](https://composio.dev) — integrations layer. One API key = Gmail, Slack, GitHub, Linear, Notion, Stripe, Supabase, + ~1000 more with hosted OAuth
+- [Composio](https://composio.dev/?utm_source=chris&utm_medium=youtube&utm_campaign=collab) — integrations layer. One API key = Gmail, Slack, GitHub, Linear, Notion, Stripe, Supabase, + ~1000 more with hosted OAuth
 - [Sendblue](https://sendblue.co) — iMessage in/out (free on their agent plan)
 - [Convex](https://convex.dev) — real-time database for memory, agents, drafts
 - Your [Claude Code](https://claude.com/code) subscription — no separate Anthropic API key required
@@ -73,13 +73,15 @@ And it's named after my dog, Luna, who gives plenty of them.
 
 You need accounts for these. Keep the tabs open — setup will ask for credentials from each.
 
-| Service | Why | Free? |
-|---|---|---|
-| [Claude Code](https://claude.com/code) | Powers the agent. Install it, sign in once, the SDK uses your session. | Subscription required |
-| [Sendblue](https://sendblue.co) | iMessage bridge. Get a number, grab API keys. | Free on their agent plan |
-| [Convex](https://convex.dev) | Database + realtime. | Free tier is plenty |
-| [Composio](https://composio.dev) | Integrations — one API key unlocks ~1000 toolkits. Optional if you just want chat + memory + automations without third-party access. | Free tier covers personal use |
-| [ngrok](https://ngrok.com) or similar | Expose your local port so Sendblue can reach it. | Free tier works |
+> **You should be able to get away with the free plan for each service (except Claude Code), and I'm working to secure discounts for you guys on the pro plans. If you work at any of these companies, please reach out!**
+
+| Service | Why | Free? | Discount code |
+|---|---|---|---|
+| [Claude Code](https://claude.com/code) | Powers the agent. Install it, sign in once, the SDK uses your session. | Subscription required | Working on getting one (if you work here, please reach out!) |
+| [Sendblue](https://sendblue.co) | iMessage bridge. Get a number, grab API keys. | Free on their agent plan | Working on getting one (in touch with them 👀) |
+| [Convex](https://convex.dev) | Database + realtime. | Free tier is plenty | Working on getting one (in touch with them 👀) |
+| [Composio](https://composio.dev/?utm_source=chris&utm_medium=youtube&utm_campaign=collab) | Integrations — one API key unlocks ~1000 toolkits. Optional if you just want chat + memory + automations without third-party access. | Free tier covers personal use | `CHRISXCOMPOSIO` — 1 month free on starter plan |
+| [ngrok](https://ngrok.com) or similar | Expose your local port so Sendblue can reach it. | Free tier works | Working on getting one (if you work here, please reach out!) |
 
 Integrations are **opt-in**. First-run without a Composio key gives you a plain chat agent with memory + automations. Drop in `COMPOSIO_API_KEY` and connect toolkits from the Debug UI whenever you want more.
 
@@ -262,7 +264,7 @@ Visit `http://localhost:5173` for the debug dashboard (chat, agents, memory, eve
 - **Execution agent** (`server/execution-agent.ts`) is spawned per task. It loads only the integrations named in the spawn call and returns a tight answer.
 - **Memory** (`server/memory/`) handles writes, recall, post-turn extraction, and daily cleaning. Stored in Convex.
 - **Automations** (`server/automations.ts`) poll every 30s for due jobs, spawn an execution agent to run them, and push results back to the user.
-- **Integrations** are provided by [Composio](https://composio.dev). The dispatcher names toolkits by slug (`spawn_agent(integrations: ["gmail"])`); `server/composio.ts` opens a toolkit-scoped Composio session per spawn and wraps its tools as an MCP server. No per-integration code to write.
+- **Integrations** are provided by [Composio](https://composio.dev/?utm_source=chris&utm_medium=youtube&utm_campaign=collab). The dispatcher names toolkits by slug (`spawn_agent(integrations: ["gmail"])`); `server/composio.ts` opens a toolkit-scoped Composio session per spawn and wraps its tools as an MCP server. No per-integration code to write.
 
 Deep dive: [ARCHITECTURE.md](./ARCHITECTURE.md). Adding your own tools: [INTEGRATIONS.md](./INTEGRATIONS.md).
 
@@ -325,7 +327,7 @@ Everything lives in `.env.local` (auto-created by `npm run setup`). See `.env.ex
 | `PORT` | no | Default `3456`. |
 | `PUBLIC_URL` | no | Base URL used in the Sendblue webhook. Composio handles its own OAuth callbacks on `platform.composio.dev`, so this is just for inbound iMessage. |
 | `VOYAGE_API_KEY` **or** `OPENAI_API_KEY` | optional | Unlocks vector recall. Falls back to substring. |
-| `COMPOSIO_API_KEY` | optional | Enables integrations. Without it, plain chat + memory + automations still work. Get one at [app.composio.dev/developers](https://app.composio.dev/developers). |
+| `COMPOSIO_API_KEY` | optional | Enables integrations. Without it, plain chat + memory + automations still work. Get one at [app.composio.dev/developers](https://app.composio.dev/developers?utm_source=chris&utm_medium=youtube&utm_campaign=collab). |
 | `COMPOSIO_USER_ID` | optional | Stable user id Composio keys connections under. Defaults to `boop-default`. |
 | `ANTHROPIC_API_KEY` | optional | Bypass the Claude Code subscription. |
 
@@ -333,11 +335,11 @@ Everything lives in `.env.local` (auto-created by `npm run setup`). See `.env.ex
 
 ## Integrations, via Composio
 
-Boop outsources 3rd-party service integrations to [Composio](https://composio.dev). One API key unlocks ~1000 toolkits (Gmail, Slack, GitHub, Linear, Notion, Drive, Stripe, Supabase, HubSpot, Salesforce, Granola, and so on). Composio hosts the OAuth apps, manages token refresh, and exposes every toolkit as a set of Claude-ready tools. Boop never sees an access token.
+Boop outsources 3rd-party service integrations to [Composio](https://composio.dev/?utm_source=chris&utm_medium=youtube&utm_campaign=collab). One API key unlocks ~1000 toolkits (Gmail, Slack, GitHub, Linear, Notion, Drive, Stripe, Supabase, HubSpot, Salesforce, Granola, and so on). Composio hosts the OAuth apps, manages token refresh, and exposes every toolkit as a set of Claude-ready tools. Boop never sees an access token.
 
 ### Quickstart
 
-1. Grab an API key at [app.composio.dev/developers](https://app.composio.dev/developers).
+1. Grab an API key at [app.composio.dev/developers](https://app.composio.dev/developers?utm_source=chris&utm_medium=youtube&utm_campaign=collab).
 2. Add it to `.env.local`:
    ```
    COMPOSIO_API_KEY=sk-comp-...

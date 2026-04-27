@@ -296,7 +296,7 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
           Add <code>COMPOSIO_API_KEY</code> to <code>.env.local</code> and restart the server to
           connect integrations like Gmail, Slack, GitHub, Linear, Notion, and more. Get a key at{" "}
           <a
-            href="https://app.composio.dev/developers"
+            href="https://app.composio.dev/developers?utm_source=chris&utm_medium=youtube&utm_campaign=collab"
             target="_blank"
             rel="noreferrer"
             className="text-sky-500 underline"

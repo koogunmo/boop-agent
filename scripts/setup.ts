@@ -601,7 +601,7 @@ Gotcha to double-check:
   parameter: from_number" otherwise.
 
 Integrations (via Composio):
-  1. Set COMPOSIO_API_KEY in .env.local (get one at app.composio.dev).
+  1. Set COMPOSIO_API_KEY in .env.local (get one at https://app.composio.dev/developers?utm_source=chris&utm_medium=youtube&utm_campaign=collab).
   2. Open the debug dashboard → Connections tab.
   3. Click Connect on any toolkit (Gmail, Slack, GitHub, Linear, Notion, …).
   4. Composio handles OAuth; the toolkit becomes available to the agent.

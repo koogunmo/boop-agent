@@ -125,7 +125,7 @@ Keeps memory sharper over time instead of noisier. The full run is logged in `co
 
 ### 8. Integrations — Composio (`server/composio.ts`)
 
-Boop delegates all third-party integrations to [Composio](https://composio.dev). One SDK, 1000+ toolkits, hosted auth.
+Boop delegates all third-party integrations to [Composio](https://composio.dev/?utm_source=chris&utm_medium=youtube&utm_campaign=collab). One SDK, 1000+ toolkits, hosted auth.
 
 Flow:
 1. User clicks **Connect** on a toolkit card in the debug dashboard's Connections tab.
