@@ -28,14 +28,15 @@
     ]
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.41",
     "@composio/core": "^0.6.11",
     "@hono/zod-validator": "^0.7.6",
     "@hugeicons/core-free-icons": "^1.0.0",
     "@hugeicons/react": "^1.0.0",
+    "ai": "^6.0.168",
     "convex": "^1.36.1",
     "hono": "^4.12.14",
     "libphonenumber-js": "^1.12.42",
-    "openai": "^6.34.0",
     "react-force-graph-2d": "^1.27.0",
     "remove-markdown": "^0.6.3",
     "sendblue": "^3.9.0",

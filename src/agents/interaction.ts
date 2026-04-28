@@ -1,9 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
+import { generateText, type ModelMessage } from "ai";
 import { ConvexHttpClient } from "convex/browser";
-import type OpenAI from "openai";
 import { z } from "zod";
 import { api } from "../../convex/_generated/api";
-import { createLlmClient } from "../lib/llm";
+import { createProvider } from "../lib/llm";
 
 const INTERACTION_SYSTEM = `You are Boop, a personal agent the user texts from iMessage.
 
@@ -24,16 +24,16 @@ const handleRequestSchema = z.object({
 
 export class BoopInteractionAgent extends DurableObject<Env> {
   _convex: ConvexHttpClient | null = null;
-  _llm: OpenAI | null = null;
+  _provider: ReturnType<typeof createProvider> | null = null;
 
   private get convex(): ConvexHttpClient {
     this._convex ??= new ConvexHttpClient(this.env.CONVEX_URL);
     return this._convex;
   }
 
-  private get llm(): OpenAI {
-    this._llm ??= createLlmClient(this.env);
-    return this._llm;
+  private get provider() {
+    this._provider ??= createProvider(this.env);
+    return this._provider;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -67,9 +67,7 @@ export class BoopInteractionAgent extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer): void {
-    // inbound messages from dashboard clients — not used yet
-  }
+  webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer): void {}
 
   webSocketClose(ws: WebSocket): void {
     ws.close();
@@ -94,9 +92,7 @@ export class BoopInteractionAgent extends DurableObject<Env> {
       limit: 10,
     });
 
-    const messages: OpenAI.ChatCompletionMessageParam[] = [
-      { role: "system", content: INTERACTION_SYSTEM },
-    ];
+    const messages: ModelMessage[] = [];
 
     for (const m of history) {
       if (m.role === "user" || m.role === "assistant") {
@@ -116,13 +112,14 @@ export class BoopInteractionAgent extends DurableObject<Env> {
     this.broadcast("user_message", { conversationId, content });
 
     try {
-      const response = await this.llm.chat.completions.create({
-        model: this.env.MODEL_DISPATCHER,
+      const result = await generateText({
+        model: this.provider(this.env.MODEL_DISPATCHER),
+        system: INTERACTION_SYSTEM,
         messages,
-        max_tokens: 1024,
+        maxOutputTokens: 1024,
       });
 
-      const reply = response.choices[0]?.message?.content?.trim() ?? "(no reply)";
+      const reply = result.text.trim() || "(no reply)";
 
       await this.convex.mutation(api.messages.send, {
         conversationId,
