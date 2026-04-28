@@ -11,7 +11,7 @@
     "worker-configuration.d.ts"
   ],
   "usedClassMembers": [
-    { "extends": "DurableObject", "members": ["fetch", "webSocketMessage", "webSocketClose"] }
+    { "extends": "DurableObject", "members": ["fetch", "webSocketMessage", "webSocketClose", "alarm"] }
   ],
   "rules": {
     "unused-dependencies": "warn"

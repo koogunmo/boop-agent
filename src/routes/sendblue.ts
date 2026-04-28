@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { api } from "../../convex/_generated/api";
 import { dispatchToAgent } from "../lib/agent-dispatch";
-import { sendImessage, sendTypingIndicator } from "../lib/sendblue";
+import { sendImessage, startTypingLoop } from "../lib/sendblue";
 
 const webhookBody = z.object({
   content: z.string().optional(),
@@ -22,10 +22,8 @@ async function processInbound(
   fromNumber: string,
 ): Promise<void> {
   const start = Date.now();
-  const typingInterval = setInterval(() => sendTypingIndicator(env, fromNumber), 5000);
+  const stopTyping = startTypingLoop(env, fromNumber);
   try {
-    await sendTypingIndicator(env, fromNumber);
-
     const result = await dispatchToAgent(env.BOOP_AGENT, conversationId, content);
 
     if (!result.ok) {
@@ -42,7 +40,7 @@ async function processInbound(
   } catch (err) {
     console.error("[sendblue] handler error", err);
   } finally {
-    clearInterval(typingInterval);
+    stopTyping();
   }
 }
 

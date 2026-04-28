@@ -71,6 +71,12 @@ export async function sendImessage(env: Env, toNumber: string, text: string): Pr
   }
 }
 
+export function startTypingLoop(env: Env, toNumber: string): () => void {
+  sendTypingIndicator(env, toNumber);
+  const timer = setInterval(() => sendTypingIndicator(env, toNumber), 5000);
+  return () => clearInterval(timer);
+}
+
 export async function sendTypingIndicator(env: Env, toNumber: string): Promise<void> {
   const client = createClient(env);
   if (!client) return;

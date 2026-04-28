@@ -1,9 +1,9 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import app from "../index";
-import { mockModel, mockModelThatFails, mockProvider } from "../lib/test-helpers";
+import { injectMocksIntoDO, injectMocksWithErrorIntoDO, mockConvex } from "../lib/test-helpers";
 import type { BoopInteractionAgent } from "./interaction";
 
 const healthResponse = z.object({ ok: z.boolean(), service: z.string() });
@@ -25,39 +25,6 @@ function json(init: { method: string; body: Record<string, unknown> }): RequestI
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(init.body),
   };
-}
-
-function mockConvex(queryResult: unknown = []) {
-  return {
-    query: vi.fn().mockResolvedValue(queryResult),
-    mutation: vi.fn().mockResolvedValue(null),
-  };
-}
-
-type MockConvex = ReturnType<typeof mockConvex>;
-
-async function injectMocks(
-  stub: DurableObjectStub<BoopInteractionAgent>,
-  convex: MockConvex,
-  reply: string,
-) {
-  await runInDurableObject<BoopInteractionAgent, void>(stub, async (instance) => {
-    (instance as unknown as { _convex: unknown })._convex = convex;
-    (instance as unknown as { _provider: unknown })._provider = mockProvider(mockModel(reply));
-  });
-}
-
-async function injectMocksWithError(
-  stub: DurableObjectStub<BoopInteractionAgent>,
-  convex: MockConvex,
-  error: Error,
-) {
-  await runInDurableObject<BoopInteractionAgent, void>(stub, async (instance) => {
-    (instance as unknown as { _convex: unknown })._convex = convex;
-    (instance as unknown as { _provider: unknown })._provider = mockProvider(
-      mockModelThatFails(error),
-    );
-  });
 }
 
 function waitForMessage(ws: WebSocket, timeoutMs = 2000): Promise<string> {
@@ -187,7 +154,7 @@ describe("BoopInteractionAgent DO", () => {
   it("handles /handle POST: queries history, calls LLM, saves messages, returns reply", async () => {
     const convex = mockConvex([]);
     const stub = getStub("t-handle");
-    await injectMocks(stub, convex, "mocked reply");
+    await injectMocksIntoDO(stub, convex, "mocked reply");
 
     const res = await stub.fetch("http://agent/handle", {
       method: "POST",
@@ -199,8 +166,8 @@ describe("BoopInteractionAgent DO", () => {
     const body = replyResponse.parse(await res.json());
     expect(body.reply).toBe("mocked reply");
 
-    expect(convex.query).toHaveBeenCalledOnce();
-    expect(convex.mutation).toHaveBeenCalledTimes(2);
+    expect(convex.query).toHaveBeenCalledTimes(2);
+    expect(convex.mutation).toHaveBeenCalledTimes(3);
 
     expect(convex.mutation.mock.calls[0]![1]).toMatchObject({
       conversationId: "test:do",
@@ -209,6 +176,10 @@ describe("BoopInteractionAgent DO", () => {
     });
 
     expect(convex.mutation.mock.calls[1]![1]).toMatchObject({
+      source: "dispatcher",
+    });
+
+    expect(convex.mutation.mock.calls[2]![1]).toMatchObject({
       conversationId: "test:do",
       role: "assistant",
       content: "mocked reply",
@@ -222,7 +193,7 @@ describe("BoopInteractionAgent DO", () => {
       { role: "system", content: "should be filtered" },
     ]);
     const stub = getStub("t-history");
-    await injectMocks(stub, convex, "second reply");
+    await injectMocksIntoDO(stub, convex, "second reply");
 
     await stub.fetch("http://agent/handle", {
       method: "POST",
@@ -230,17 +201,17 @@ describe("BoopInteractionAgent DO", () => {
       body: JSON.stringify({ conversationId: "test:hist", content: "second" }),
     });
 
-    // Verify convex was queried for history
-    expect(convex.query).toHaveBeenCalledOnce();
-    // Verify 2 mutations: user save + assistant save
-    expect(convex.mutation).toHaveBeenCalledTimes(2);
+    // Verify convex was queried for history + settings
+    expect(convex.query).toHaveBeenCalledTimes(2);
+    // Verify 3 mutations: user save + usage record + assistant save
+    expect(convex.mutation).toHaveBeenCalledTimes(3);
   });
 
   it("uses MODEL_DISPATCHER from env", async () => {
     const convex = mockConvex([]);
     const stub = getStub("t-model");
     // The mock provider ignores the model ID, but the code path still reads it from env
-    await injectMocks(stub, convex, "ok");
+    await injectMocksIntoDO(stub, convex, "ok");
 
     const res = await stub.fetch("http://agent/handle", {
       method: "POST",
@@ -255,7 +226,7 @@ describe("BoopInteractionAgent DO", () => {
   it("returns fallback message when LLM throws", async () => {
     const convex = mockConvex([]);
     const stub = getStub("t-err");
-    await injectMocksWithError(stub, convex, new Error("API timeout"));
+    await injectMocksWithErrorIntoDO(stub, convex, new Error("API timeout"));
 
     const res = await stub.fetch("http://agent/handle", {
       method: "POST",
@@ -272,7 +243,7 @@ describe("BoopInteractionAgent DO", () => {
   it("returns '(no reply)' when LLM returns empty text", async () => {
     const convex = mockConvex([]);
     const stub = getStub("t-empty");
-    await injectMocks(stub, convex, "");
+    await injectMocksIntoDO(stub, convex, "");
 
     const res = await stub.fetch("http://agent/handle", {
       method: "POST",

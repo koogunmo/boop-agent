@@ -12,6 +12,7 @@
         "@hugeicons/react": "^1.0.0",
         "ai": "^6.0.168",
         "convex": "^1.36.1",
+        "croner": "^10.0.1",
         "hono": "^4.12.14",
         "libphonenumber-js": "^1.12.42",
         "react-force-graph-2d": "^1.27.0",
@@ -20,6 +21,7 @@
         "zod": "^4.3.6",
       },
       "devDependencies": {
+        "@ai-sdk/provider": "^3.0.8",
         "@biomejs/biome": "^2.4.12",
         "@cloudflare/vitest-pool-workers": "0.14.9",
         "@cloudflare/workers-types": "^4.20260426.1",
@@ -457,6 +459,8 @@
     "convex": ["convex@1.36.1", "https://npm.hubteam.com/convex/-/convex-1.36.1.tgz", { "dependencies": { "esbuild": "0.27.0", "prettier": "^3.0.0", "ws": "8.18.0" }, "peerDependencies": { "@auth0/auth0-react": "^2.0.1", "@clerk/clerk-react": "^4.12.8 || ^5.0.0", "@clerk/react": "^6.4.3", "react": "^18.0.0 || ^19.0.0-0 || ^19.0.0" }, "optionalPeers": ["@auth0/auth0-react", "@clerk/clerk-react", "@clerk/react", "react"], "bin": { "convex": "bin/main.js" } }, "sha512-NVnwNqU+h8jyPuS0Itvj4MPH9c2yF+tA/RNoSDpCqiLhmYD4+kZxm0dDkVM0QDzz66wem9NqheBb9YQGsHwzBQ=="],
 
     "cookie": ["cookie@1.1.1", "https://npm.hubteam.com/cookie/-/cookie-1.1.1.tgz", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
+
+    "croner": ["croner@10.0.1", "https://npm.hubteam.com/croner/-/croner-10.0.1.tgz", {}, "sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g=="],
 
     "csstype": ["csstype@3.2.3", "https://npm.hubteam.com/csstype/-/csstype-3.2.3.tgz", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
 

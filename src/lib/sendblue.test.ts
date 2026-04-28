@@ -1,27 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chunk, sendImessage } from "./sendblue";
-
-function testEnv(overrides: Record<string, string> = {}): Env {
-  return {
-    SENDBLUE_API_KEY: "test-key",
-    SENDBLUE_API_SECRET: "test-secret",
-    SENDBLUE_FROM_NUMBER: "+14155550000",
-    CONVEX_URL: "http://localhost:3210",
-    CF_ACCOUNT_ID: "test",
-    CF_GATEWAY_ID: "test",
-    CF_API_TOKEN: "test",
-    COMPOSIO_API_KEY: "test",
-    BOOP_MODEL: "kimi-k2.6",
-    MODEL_DISPATCHER: "kimi-k2.6",
-    MODEL_EXECUTOR: "kimi-k2.6",
-    MODEL_EXTRACTION: "glm-4.7-flash",
-    MODEL_ADVERSARY: "glm-4.7-flash",
-    MODEL_PROPOSER: "claude-sonnet-4-6",
-    MODEL_JUDGE: "claude-sonnet-4-6",
-    COMPOSIO_USER_ID: "boop-default",
-    ...overrides,
-  } satisfies Record<string, string> as unknown as Env;
-}
+import { testEnv } from "./test-helpers";
 
 function mockSendblueResponse(status = "QUEUED") {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(
