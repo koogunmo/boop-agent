@@ -13,10 +13,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["@cloudflare/vitest-pool-workers"]
   },
   "include": [
     "src/**/*.ts",
+    "convex/_generated/**/*.ts",
     "worker-configuration.d.ts"
   ],
   "exclude": ["node_modules"]

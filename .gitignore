@@ -4,6 +4,7 @@ build/
 .env
 .env.local
 .env.*.local
+.dev.vars
 *.log
 .DS_Store
 .convex/
@@ -17,3 +18,5 @@ data/
 debug/dist/
 .cache/
 .tsbuildinfo
+.wrangler/
+.fallow/

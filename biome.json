@@ -39,6 +39,18 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["src/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    }
+  ],
   "files": {
     "includes": ["src/**", "scripts/**"],
     "experimentalScannerIgnores": ["node_modules", "dist", "convex/_generated", "worker-configuration.d.ts"]
