@@ -15,7 +15,6 @@ Format:
 - Added: `agentLogs.accounts` field — each tool_use row now records which Composio account aliases were targeted (e.g. `gmail_charry-fusc`). Surfaced as a small badge in the debug UI's agent timeline. Pulled from `account` / `connectedAccountId` / `tools[].account` in tool input.
 - Added: new Convex `settings` table (key/value/updatedAt) and `convex/settings.ts` with `get` / `set` / `clear`.
 - Fixed: per-connection identity lookup. `fetchToolkitIdentity` was calling `composio.tools.execute` without a `connectedAccountId`, so multiple Gmail / Slack / etc. connections all got labeled with the user's *default* account email. Now scoped per connection — the Connections panel shows the correct email per row.
-- Added: `scripts/check-gmail.mjs` — debug script that lists connected Gmails and verifies identity per connection ID.
 
 ## Unreleased — Composio integration layer
 
