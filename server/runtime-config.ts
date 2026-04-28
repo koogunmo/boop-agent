@@ -40,7 +40,11 @@ export async function getRuntimeModel(): Promise<string> {
   } catch (err) {
     console.warn("[runtime-config] settings:get failed", err);
   }
-  const final = stored ?? envFallback();
+  // Re-validate even though set_model writes through resolveModelInput — the
+  // settings table is also writable via the Convex dashboard and other
+  // mutations, and a bad value here would surface as an opaque SDK 4xx on the
+  // next turn instead of falling back gracefully.
+  const final = stored && KNOWN_MODELS.has(stored) ? stored : envFallback();
   cached = { at: Date.now(), value: final };
   return final;
 }
