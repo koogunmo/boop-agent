@@ -102,9 +102,7 @@ const BYO_PORTALS: Record<string, { label: string; url: string; note?: string }>
   },
 };
 
-function composioAuthConfigUrl(slug: string): string {
-  return `https://platform.composio.dev/auth-configs?toolkit=${encodeURIComponent(slug)}`;
-}
+const COMPOSIO_DASHBOARD_URL = "https://dashboard.composio.dev";
 
 const INTRO_DISMISSED_KEY = "boop:connections:intro-dismissed";
 const TOAST_TIMEOUT_MS = 6000;
@@ -288,7 +286,7 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
             setNeedsAuthConfig({
               slug,
               message: err.error,
-              setupUrl: err.setupUrl ?? "https://platform.composio.dev/auth-configs",
+              setupUrl: err.setupUrl ?? COMPOSIO_DASHBOARD_URL,
             });
             return;
           }
@@ -836,7 +834,6 @@ function ByoSetupSteps({
   onConnect: (slug: string) => void;
 }) {
   const portal = BYO_PORTALS[slug];
-  const composioUrl = composioAuthConfigUrl(slug);
   const wrapClass = `mt-3 pt-3 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`;
   const linkClass = isDark
     ? "text-sky-400 hover:text-sky-300 underline"
@@ -869,11 +866,11 @@ function ByoSetupSteps({
         <li className={`text-xs flex items-start ${isDark ? "text-slate-300" : "text-slate-700"}`}>
           <span className={stepNumberClass}>2</span>
           <span className="leading-snug">
-            Paste those credentials into Composio at{" "}
-            <a href={composioUrl} target="_blank" rel="noreferrer" className={linkClass}>
-              platform.composio.dev/auth-configs ↗
-            </a>{" "}
-            (select <span className="mono">{slug}</span>).
+            In{" "}
+            <a href={COMPOSIO_DASHBOARD_URL} target="_blank" rel="noreferrer" className={linkClass}>
+              Composio Dashboard ↗
+            </a>
+            : Toolkits → search <span className="mono">{slug}</span> → Add to project → paste those credentials.
           </span>
         </li>
         <li className={`text-xs flex items-start ${isDark ? "text-slate-300" : "text-slate-700"}`}>
