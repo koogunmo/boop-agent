@@ -1,0 +1,32 @@
+#:schema node_modules/wrangler/config-schema.json
+
+name = "boop-agent"
+main = "src/index.ts"
+compatibility_date = "2026-04-23"
+compatibility_flags = ["nodejs_compat"]
+
+[ai]
+binding = "AI"
+
+[browser]
+binding = "BROWSER"
+
+[durable_objects]
+bindings = [
+  { name = "BOOP_AGENT", class_name = "BoopInteractionAgent" },
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BoopInteractionAgent"]
+
+[vars]
+BOOP_MODEL = "kimi-k2.6"
+MODEL_DISPATCHER = "kimi-k2.6"
+MODEL_EXECUTOR = "kimi-k2.6"
+MODEL_EXTRACTION = "glm-4.7-flash"
+MODEL_ADVERSARY = "glm-4.7-flash"
+MODEL_PROPOSER = "claude-sonnet-4-6"
+MODEL_JUDGE = "claude-sonnet-4-6"
+SENDBLUE_FROM_NUMBER = ""
+COMPOSIO_USER_ID = "boop-default"
