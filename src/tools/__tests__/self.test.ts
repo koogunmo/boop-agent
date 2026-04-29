@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { cvx, mockConvex, testEnv } from "../lib/test-helpers";
-import { createSelfTools } from "./self";
+import { cvx, mockConvex, testEnv } from "@/lib/test-helpers";
+import { createSelfTools } from "@/tools/self";
 
 const toolOpts = {
   messages: [],

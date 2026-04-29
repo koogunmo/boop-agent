@@ -1,16 +1,16 @@
 import type { ConvexHttpClient } from "convex/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import type { MockConvex } from "../lib/test-helpers";
-import { mockConvex } from "../lib/test-helpers";
-import { cleanMemories } from "./clean";
+import type { MockConvex } from "@/lib/test-helpers";
+import { mockConvex } from "@/lib/test-helpers";
+import { cleanMemories } from "@/memory/clean";
 import {
   ARCHIVE_THRESHOLD,
   BASE_HALF_LIFE_DAYS,
   DAY_MS,
   effectiveScore,
   PRUNE_THRESHOLD,
-} from "./types";
+} from "@/memory/types";
 
 function cvx(mock: MockConvex): ConvexHttpClient {
   return mock as unknown as ConvexHttpClient;

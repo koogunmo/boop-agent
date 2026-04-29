@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { cvx, mockConvex, testEnv } from "../lib/test-helpers";
-import { createSpawnTools } from "./spawn";
+import { cvx, mockConvex, testEnv } from "@/lib/test-helpers";
+import { createSpawnTools } from "@/tools/spawn";
 
 const CONV_ID = "test:conv";
 

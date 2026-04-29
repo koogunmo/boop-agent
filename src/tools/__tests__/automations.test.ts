@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { cvx, mockConvex } from "../lib/test-helpers";
-import { createAutomationTools } from "./automations";
+import { cvx, mockConvex } from "@/lib/test-helpers";
+import { createAutomationTools } from "@/tools/automations";
 
 const CONV_ID = "test:conv";
 

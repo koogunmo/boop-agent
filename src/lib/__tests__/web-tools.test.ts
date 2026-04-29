@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { testEnv } from "./test-helpers";
-import { createWebTools } from "./web-tools";
+import { testEnv } from "@/lib/test-helpers";
+import { createWebTools } from "@/lib/web-tools";
 
 const toolOpts = {
   messages: [],

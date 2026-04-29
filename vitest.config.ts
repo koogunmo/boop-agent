@@ -10,10 +10,11 @@ export default defineConfig({
     }),
   ],
   test: {
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/__tests__/*.test.ts"],
   },
   resolve: {
     alias: {
+      "@": new URL("./src", import.meta.url).pathname,
       "css-what": "css-what/lib/commonjs/index.js",
     },
   },

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { cvx, mockConvex, testEnv } from "../lib/test-helpers";
-import { SEGMENT_DEFAULTS } from "../memory/types";
-import { createMemoryTools } from "./memory";
+import { cvx, mockConvex, testEnv } from "@/lib/test-helpers";
+import { SEGMENT_DEFAULTS } from "@/memory/types";
+import { createMemoryTools } from "@/tools/memory";
 
 const CONV_ID = "test:conv";
 

@@ -3,24 +3,27 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM"],
-    "jsx": "react-jsx",
+    "lib": ["ES2022"],
     "strict": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "noEmit": true,
-    "allowImportingTsExtensions": false,
     "baseUrl": ".",
     "paths": {
-      "@server/*": ["server/*"],
-      "@integrations/*": ["integrations/*"],
-      "@convex/*": ["convex/*"]
-    }
+      "@/*": ["src/*"]
+    },
+    "types": ["@cloudflare/vitest-pool-workers"]
   },
-  "include": ["server/**/*.ts", "integrations/**/*.ts", "scripts/**/*.ts", "debug/src/**/*.ts", "debug/src/**/*.tsx"],
-  "exclude": ["node_modules", "convex/_generated"]
+  "include": [
+    "src/**/*.ts",
+    "convex/_generated/**/*.ts",
+    "worker-configuration.d.ts"
+  ],
+  "exclude": ["node_modules"]
 }

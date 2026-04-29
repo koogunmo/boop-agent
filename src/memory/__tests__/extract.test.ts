@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import type { MockConvex } from "../lib/test-helpers";
-import { cvx, mockConvex, testEnv } from "../lib/test-helpers";
-import { extractAndStore } from "./extract";
+import type { MockConvex } from "@/lib/test-helpers";
+import { cvx, mockConvex, testEnv } from "@/lib/test-helpers";
+import { extractAndStore } from "@/memory/extract";
 
 /* ---------- mock ai module ---------- */
 
@@ -12,13 +12,13 @@ vi.mock("ai", () => ({
 
 /* ---------- mock embeddings (always return null so we isolate extraction logic) ---------- */
 
-vi.mock("../lib/embeddings", () => ({
+vi.mock("@/lib/embeddings", () => ({
   embed: vi.fn().mockResolvedValue(null),
 }));
 
 /* ---------- mock llm provider ---------- */
 
-vi.mock("../lib/llm", () => ({
+vi.mock("@/lib/llm", () => ({
   createProvider: () => (_modelId: string) => ({
     specificationVersion: "v2",
     provider: "test",

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chunk, sendImessage } from "./sendblue";
-import { testEnv } from "./test-helpers";
+import { chunk, sendImessage } from "@/lib/sendblue";
+import { testEnv } from "@/lib/test-helpers";
 
 function mockSendblueResponse(status = "QUEUED") {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(

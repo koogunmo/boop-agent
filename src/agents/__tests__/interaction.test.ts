@@ -2,9 +2,9 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import app from "../index";
-import { injectMocksIntoDO, injectMocksWithErrorIntoDO, mockConvex } from "../lib/test-helpers";
-import type { BoopInteractionAgent } from "./interaction";
+import type { BoopInteractionAgent } from "@/agents/interaction";
+import app from "@/index";
+import { injectMocksIntoDO, injectMocksWithErrorIntoDO, mockConvex } from "@/lib/test-helpers";
 
 const healthResponse = z.object({ ok: z.boolean(), service: z.string() });
 const errorResponse = z.object({ error: z.string() });
