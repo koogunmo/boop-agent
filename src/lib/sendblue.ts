@@ -77,7 +77,7 @@ export function startTypingLoop(env: Env, toNumber: string): () => void {
   return () => clearInterval(timer);
 }
 
-export async function sendTypingIndicator(env: Env, toNumber: string): Promise<void> {
+async function sendTypingIndicator(env: Env, toNumber: string): Promise<void> {
   const client = createClient(env);
   if (!client) return;
   const from = normalizeE164(env.SENDBLUE_FROM_NUMBER);

@@ -28,7 +28,9 @@
     ]
   },
   "dependencies": {
+    "@agentic/serper": "^8.4.4",
     "@ai-sdk/openai-compatible": "^2.0.41",
+    "@cloudflare/codemode": "^0.3.4",
     "@composio/core": "^0.6.11",
     "@hono/zod-validator": "^0.7.6",
     "@hugeicons/core-free-icons": "^1.0.0",
@@ -38,6 +40,7 @@
     "croner": "^10.0.1",
     "hono": "^4.12.14",
     "libphonenumber-js": "^1.12.42",
+    "node-html-markdown-cloudflare": "^1.3.0",
     "react-force-graph-2d": "^1.27.0",
     "remove-markdown": "^0.6.3",
     "sendblue": "^3.9.0",

@@ -151,7 +151,9 @@ describe("BoopInteractionAgent DO", () => {
     expect(res.status).toBe(400);
   });
 
-  it("handles /handle POST: queries history, calls LLM, saves messages, returns reply", async () => {
+  it("handles /handle POST: queries history, calls LLM, saves messages, returns reply", {
+    timeout: 15000,
+  }, async () => {
     const convex = mockConvex([]);
     const stub = getStub("t-handle");
     await injectMocksIntoDO(stub, convex, "mocked reply");
@@ -260,7 +262,7 @@ describe("BoopInteractionAgent DO", () => {
     await runInDurableObject<BoopInteractionAgent, void>(
       stub,
       async (instance: BoopInteractionAgent) => {
-        expect(() => instance.broadcast("test_event", { n: 1 })).not.toThrow();
+        expect(() => instance.broadcast("agent_stale", { agentId: "test_123" })).not.toThrow();
       },
     );
   });

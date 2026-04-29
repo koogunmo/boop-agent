@@ -1,33 +1,208 @@
-import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { injectMocksIntoDO, mockConvex } from "../lib/test-helpers";
+import { cvx, mockConvex, testEnv } from "../lib/test-helpers";
 import { SEGMENT_DEFAULTS } from "../memory/types";
+import { createMemoryTools } from "./memory";
 
-const replyResponse = z.object({ reply: z.string() });
+const CONV_ID = "test:conv";
 
-function getStub(name: string) {
-  return env.BOOP_AGENT.get(env.BOOP_AGENT.idFromName(name));
-}
+const toolOpts = {
+  messages: [],
+  abortSignal: new AbortController().signal,
+  toolCallId: "tc_test",
+};
 
-async function sendMessage(stub: DurableObjectStub, content: string) {
-  return stub.fetch("http://agent/handle", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ conversationId: "test:mem", content }),
+describe("write_memory", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("uses segment default tier for identity (permanent) and calls upsert + emit", async () => {
+    const convex = mockConvex();
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+    });
+
+    const result = await tools.write_memory.execute!(
+      { content: "User is an engineer", segment: "identity", importance: 0.85 },
+      toolOpts,
+    );
+
+    const resultStr = z.string().parse(result);
+    expect(resultStr).toContain("tier=permanent");
+    expect(resultStr).toContain("segment=identity");
+
+    expect(convex.mutation).toHaveBeenCalledTimes(2);
+
+    // First call: memoryRecords.upsert
+    const upsertArgs = convex.mutation.mock.calls[0]![1];
+    expect(upsertArgs).toMatchObject({
+      content: "User is an engineer",
+      tier: "permanent",
+      segment: "identity",
+      importance: 0.85,
+      decayRate: 0,
+    });
+
+    // Second call: memoryEvents.emit
+    const emitArgs = convex.mutation.mock.calls[1]![1];
+    expect(emitArgs).toMatchObject({
+      eventType: "memory.written",
+      conversationId: CONV_ID,
+    });
+    const emitData = z
+      .object({ tier: z.string(), segment: z.string(), importance: z.number() })
+      .parse(JSON.parse(emitArgs.data));
+    expect(emitData.tier).toBe("permanent");
   });
-}
 
-describe("memory tools via interaction agent", () => {
-  it("tools are included and agent responds", async () => {
+  it("uses segment default tier for context (short)", async () => {
+    const convex = mockConvex();
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+    });
+
+    const result = await tools.write_memory.execute!(
+      { content: "Currently at a coffee shop", segment: "context", importance: 0.4 },
+      toolOpts,
+    );
+
+    const resultStr = z.string().parse(result);
+    expect(resultStr).toContain("tier=short");
+
+    const upsertArgs = convex.mutation.mock.calls[0]![1];
+    expect(upsertArgs.tier).toBe("short");
+    // write_memory uses DEFAULT_DECAY[tier], not SEGMENT_DEFAULTS[segment].decayRate
+    expect(upsertArgs.decayRate).toBe(0.05);
+  });
+
+  it("passes supersedes array when provided", async () => {
+    const convex = mockConvex();
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+    });
+
+    await tools.write_memory.execute!(
+      {
+        content: "Name is actually Alex",
+        segment: "correction",
+        importance: 0.8,
+        supersedes: ["mem_old1", "mem_old2"],
+      },
+      toolOpts,
+    );
+
+    const upsertArgs = convex.mutation.mock.calls[0]![1];
+    expect(upsertArgs.supersedes).toEqual(["mem_old1", "mem_old2"]);
+  });
+
+  it("allows explicit tier override", async () => {
+    const convex = mockConvex();
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+    });
+
+    const result = await tools.write_memory.execute!(
+      { content: "Temporary note", segment: "knowledge", importance: 0.5, tier: "short" },
+      toolOpts,
+    );
+
+    const resultStr = z.string().parse(result);
+    expect(resultStr).toContain("tier=short");
+
+    const upsertArgs = convex.mutation.mock.calls[0]![1];
+    expect(upsertArgs.tier).toBe("short");
+  });
+});
+
+describe("recall", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns 'No memories matched.' when search returns empty", async () => {
     const convex = mockConvex([]);
-    const stub = getStub("t-tools-exist");
-    await injectMocksIntoDO(stub, convex, "hello");
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+    });
 
-    const res = await sendMessage(stub, "hi");
-    expect(res.status).toBe(200);
-    const body = replyResponse.parse(await res.json());
-    expect(body.reply).toBeTruthy();
+    const result = await tools.recall.execute!({ query: "nonexistent topic", limit: 10 }, toolOpts);
+
+    expect(z.string().parse(result)).toBe("No memories matched.");
+  });
+
+  it("formats results with tier/segment/importance and calls markAccessed", async () => {
+    const memories = [
+      {
+        memoryId: "mem_abc",
+        tier: "permanent",
+        segment: "identity",
+        importance: 0.85,
+        content: "User is an engineer",
+      },
+      {
+        memoryId: "mem_def",
+        tier: "long",
+        segment: "preference",
+        importance: 0.7,
+        content: "Prefers dark mode",
+      },
+    ];
+    const convex = mockConvex(memories);
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+    });
+
+    const result = await tools.recall.execute!({ query: "user info", limit: 10 }, toolOpts);
+
+    const resultStr = z.string().parse(result);
+    expect(resultStr).toContain("permanent/identity");
+    expect(resultStr).toContain("importance=0.85");
+    expect(resultStr).toContain("mem_abc");
+    expect(resultStr).toContain("User is an engineer");
+    expect(resultStr).toContain("long/preference");
+    expect(resultStr).toContain("Prefers dark mode");
+
+    // markAccessed called once per result
+    const markAccessedCalls = convex.mutation.mock.calls.filter((call: unknown[]) => {
+      const args = call[1] as Record<string, unknown>;
+      return "memoryId" in args && !("eventType" in args);
+    });
+    expect(markAccessedCalls).toHaveLength(2);
+    expect(markAccessedCalls[0]![1]).toMatchObject({ memoryId: "mem_abc" });
+    expect(markAccessedCalls[1]![1]).toMatchObject({ memoryId: "mem_def" });
+  });
+
+  it("emits memory.recalled event", async () => {
+    const convex = mockConvex([]);
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+    });
+
+    await tools.recall.execute!({ query: "anything", limit: 5 }, toolOpts);
+
+    // The last mutation call should be the emit
+    const lastCall = convex.mutation.mock.calls[convex.mutation.mock.calls.length - 1]!;
+    expect(lastCall[1]).toMatchObject({
+      eventType: "memory.recalled",
+      conversationId: CONV_ID,
+    });
+    const data = z
+      .object({ query: z.string(), hits: z.number(), mode: z.string() })
+      .parse(JSON.parse(lastCall[1].data));
+    expect(data.query).toBe("anything");
+    expect(data.hits).toBe(0);
+    expect(data.mode).toBe("substring");
   });
 });
 

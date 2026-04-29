@@ -3,6 +3,8 @@ import { generateText, type ModelMessage, stepCountIs } from "ai";
 import { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import { api } from "../../convex/_generated/api";
+import type { EventData, EventName } from "../lib/events";
+import { broadcastEventSchema } from "../lib/events";
 import { createProvider } from "../lib/llm";
 import { cleanMemories } from "../memory/clean";
 import { extractAndStore } from "../memory/extract";
@@ -13,6 +15,9 @@ import { createDraftDecisionTools } from "../tools/drafts";
 import { createMemoryTools } from "../tools/memory";
 import { createSelfTools } from "../tools/self";
 import { createSpawnTools } from "../tools/spawn";
+
+const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const STALE_AGENT_MS = 15 * 60 * 1000;
 
 const INTERACTION_SYSTEM = `You are Boop, a personal agent the user texts from iMessage.
 
@@ -26,7 +31,7 @@ Tone: Warm, witty, concise. Write like you're texting a friend. No corporate voi
 
 Your only tools:
 - recall / write_memory (durable memory for this user)
-- spawn_agent (dispatches a sub-agent that CAN touch the world — NOT YET AVAILABLE, tell user it's coming soon if they need it)
+- spawn_agent (dispatches a sub-agent that CAN touch the world)
 - create_automation / list_automations / toggle_automation / delete_automation
 - list_drafts / send_draft / reject_draft
 - get_config / set_model / list_integrations / search_composio_catalog / inspect_toolkit (self-inspection)
@@ -41,9 +46,7 @@ not count as a source.
 Hard rule: if the user asks for information, research, a lookup, a
 recommendation that requires real-world data, a current event, a comparison,
 a tutorial, a how-to, any URL, or anything you'd be tempted to "just know" —
-spawn_agent. No exceptions. Even if you're 99% sure. If spawn_agent returns
-that it's not yet available, tell the user honestly that this capability is
-coming soon.
+spawn_agent. No exceptions. Even if you're 99% sure.
 
 Acknowledgment rule (iMessage UX):
 BEFORE every spawn_agent call, you MUST call send_ack first with a short
@@ -128,6 +131,16 @@ export class BoopInteractionAgent extends DurableObject<Env> {
       return this.handleWebSocket(request);
     }
 
+    if (url.pathname === "/broadcast" && request.method === "POST") {
+      const raw: unknown = await request.json();
+      const parsed = broadcastEventSchema.safeParse(raw);
+      if (!parsed.success) {
+        return new Response("bad request", { status: 400 });
+      }
+      this.broadcast(parsed.data.event, parsed.data.data);
+      return Response.json({ ok: true });
+    }
+
     if (url.pathname === "/handle" && request.method === "POST") {
       const raw: unknown = await request.json();
       const parsed = handleRequestSchema.safeParse(raw);
@@ -160,17 +173,56 @@ export class BoopInteractionAgent extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     try {
-      const result = await cleanMemories(this.convex);
-      console.log(
-        `[cleanup] scanned=${result.scanned} archived=${result.archived} pruned=${result.pruned}`,
-      );
+      await this.sweepStaleAgents();
     } catch (err) {
-      console.error("[cleanup] error", err);
+      console.error("[heartbeat] sweep error", err);
     }
-    await this.ctx.storage.setAlarm(Date.now() + 6 * 60 * 60 * 1000);
+
+    const lastCleanup = (await this.ctx.storage.get<number>("lastCleanupAt")) ?? 0;
+    if (Date.now() - lastCleanup >= CLEANUP_INTERVAL_MS) {
+      try {
+        const result = await cleanMemories(this.convex);
+        console.log(
+          `[cleanup] scanned=${result.scanned} archived=${result.archived} pruned=${result.pruned}`,
+        );
+        await this.ctx.storage.put("lastCleanupAt", Date.now());
+      } catch (err) {
+        console.error("[cleanup] error", err);
+      }
+    }
+
+    await this.ctx.storage.setAlarm(Date.now() + 60_000);
   }
 
-  broadcast(event: string, data: unknown): void {
+  private async sweepStaleAgents(): Promise<void> {
+    const runningInDb = await this.convex.query(api.agents.list, {
+      status: "running",
+      limit: 100,
+    });
+    const now = Date.now();
+
+    for (const a of runningInDb) {
+      const age = now - a.startedAt;
+      if (age < STALE_AGENT_MS) continue;
+
+      const execId = this.env.EXEC_AGENT.idFromName(a.agentId);
+      const execStub = this.env.EXEC_AGENT.get(execId);
+      try {
+        await execStub.fetch("http://agent/cancel", { method: "POST" });
+      } catch {
+        // DO may already be gone
+      }
+
+      await this.convex.mutation(api.agents.update, {
+        agentId: a.agentId,
+        status: "failed",
+        error: `Marked failed after ${Math.round(age / 1000)}s (stale heartbeat).`,
+      });
+      this.broadcast("agent_stale", { agentId: a.agentId });
+    }
+  }
+
+  broadcast<E extends EventName>(event: E, data: EventData<E>): void {
     const payload = JSON.stringify({ event, data, at: Date.now() });
     for (const ws of this.ctx.getWebSockets()) {
       try {
@@ -202,7 +254,7 @@ export class BoopInteractionAgent extends DurableObject<Env> {
     return {
       ...createMemoryTools(deps),
       ...createAckTools(deps),
-      ...createSpawnTools(),
+      ...createSpawnTools(deps),
       ...createAutomationTools(deps),
       ...createDraftDecisionTools(deps),
       ...createSelfTools(deps),

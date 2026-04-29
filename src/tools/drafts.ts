@@ -7,6 +7,7 @@ import { randomId } from "../memory/types";
 interface DraftToolDeps {
   convex: ConvexHttpClient;
   conversationId: string;
+  env?: Env;
 }
 
 export function createDraftStagingTools(deps: DraftToolDeps) {
@@ -90,7 +91,41 @@ export function createDraftDecisionTools(deps: DraftToolDeps) {
           status: "sent",
         });
 
-        return `Draft ${args.draftId} approved but execution agents not yet available (Phase 3). Draft marked as sent.`;
+        if (!deps.env) {
+          return `Draft ${args.draftId} marked as sent but execution not available.`;
+        }
+
+        const execAgentId = randomId("agent");
+        const execTask = `Execute this approved draft. Use the matching integration tool to actually send/create it.\nkind: ${draft.kind}\nsummary: ${draft.summary}\npayload JSON: ${draft.payload}`;
+
+        await convex.mutation(api.agents.create, {
+          agentId: execAgentId,
+          conversationId,
+          name: `send:${draft.kind}`,
+          task: execTask,
+          mcpServers: args.integrations,
+        });
+
+        const execId = deps.env.EXEC_AGENT.idFromName(execAgentId);
+        const stub = deps.env.EXEC_AGENT.get(execId);
+        const execRes = await stub.fetch("http://agent/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task: execTask,
+            integrations: args.integrations,
+            conversationId,
+            name: `send:${draft.kind}`,
+            agentId: execAgentId,
+          }),
+        });
+
+        if (!execRes.ok) {
+          return `Draft ${args.draftId} approved but execution failed.`;
+        }
+
+        const execResult = (await execRes.json()) as { result: string };
+        return `Draft ${args.draftId} executed.\n\n${execResult.result}`;
       },
     }),
 

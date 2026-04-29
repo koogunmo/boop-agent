@@ -5,11 +5,16 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: {
-        configPath: "./wrangler.toml",
+        configPath: "./wrangler.test.toml",
       },
     }),
   ],
   test: {
     include: ["src/**/*.test.ts"],
+  },
+  resolve: {
+    alias: {
+      "css-what": "css-what/lib/commonjs/index.js",
+    },
   },
 });

@@ -7,6 +7,8 @@ declare namespace Cloudflare {
     SENDBLUE_API_KEY: string;
     SENDBLUE_API_SECRET: string;
     COMPOSIO_API_KEY: string;
+    SERPER_API_KEY: string;
+    CF_BROWSER_TOKEN?: string;
     CONVEX_URL: string;
   }
 }

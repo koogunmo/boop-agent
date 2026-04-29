@@ -2,6 +2,7 @@ import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import { api } from "../../convex/_generated/api";
+import type { BroadcastFn } from "../lib/events";
 import { sendImessage } from "../lib/sendblue";
 
 interface AckToolDeps {
@@ -9,7 +10,7 @@ interface AckToolDeps {
   env: Env;
   conversationId: string;
   turnId: string;
-  broadcast: (event: string, data: unknown) => void;
+  broadcast: BroadcastFn;
 }
 
 export function createAckTools(deps: AckToolDeps) {

@@ -83,6 +83,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     MODEL_PROPOSER: "anthropic/claude-sonnet-4-6",
     MODEL_JUDGE: "anthropic/claude-sonnet-4-6",
     COMPOSIO_USER_ID: "boop-default",
+    SERPER_API_KEY: "test-serper-key",
     ...overrides,
   } satisfies Record<string, string> as unknown as Env;
 }
