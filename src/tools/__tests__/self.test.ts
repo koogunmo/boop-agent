@@ -1,7 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import * as composioModule from "@/lib/composio";
 import { cvx, mockConvex, testEnv } from "@/lib/test-helpers";
 import { createSelfTools } from "@/tools/self";
+
+function mockClient(overrides: {
+  connected?: Array<{ slug: string; status: string; accountLabel?: string; alias?: string }>;
+  meta?: Map<string, { slug: string; name: string; description?: string; toolsCount?: number }>;
+  tools?: Array<{ slug: string; name: string; description?: string }>;
+}) {
+  return {
+    raw: {} as composioModule.IComposioClient["raw"],
+    user: "test-user",
+    listConnectedToolkits: vi.fn().mockResolvedValue(overrides.connected ?? []),
+    listToolkitMeta: vi.fn().mockResolvedValue(overrides.meta ?? new Map()),
+    listToolsForToolkit: vi.fn().mockResolvedValue(overrides.tools ?? []),
+    listToolkitSlugsWithAuthConfig: vi.fn().mockResolvedValue(new Set()),
+    authorizeToolkit: vi.fn(),
+    disconnectToolkit: vi.fn(),
+  } satisfies composioModule.IComposioClient;
+}
 
 const toolOpts = {
   messages: [],
@@ -101,5 +119,200 @@ describe("set_model", () => {
     expect(resultStr).toContain("Unknown model");
     expect(resultStr).toContain("gpt-5-turbo");
     expect(convex.mutation).not.toHaveBeenCalled();
+  });
+});
+
+describe("list_integrations", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns not configured message when no API key", async () => {
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(null);
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = await tools.list_integrations.execute!({}, toolOpts);
+    expect(z.string().parse(result)).toContain("not configured");
+  });
+
+  it("returns connected integrations with labels", async () => {
+    const meta = new Map([
+      ["gmail", { slug: "gmail", name: "Gmail" }],
+      ["slack", { slug: "slack", name: "Slack" }],
+      ["github", { slug: "github", name: "GitHub" }],
+    ]);
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(
+      mockClient({
+        connected: [
+          { slug: "gmail", status: "ACTIVE", accountLabel: "user@gmail.com" },
+          { slug: "slack", status: "ACTIVE", alias: "work-slack" },
+          { slug: "github", status: "INACTIVE", accountLabel: "old-account" },
+        ],
+        meta,
+      }),
+    );
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z.string().parse(await tools.list_integrations.execute!({}, toolOpts));
+    expect(result).toContain("Gmail");
+    expect(result).toContain("user@gmail.com");
+    expect(result).toContain("Slack");
+    expect(result).toContain("work-slack");
+    expect(result).not.toContain("old-account");
+  });
+
+  it("returns no integrations message when none connected", async () => {
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(mockClient({ connected: [] }));
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z.string().parse(await tools.list_integrations.execute!({}, toolOpts));
+    expect(result).toContain("No integrations");
+  });
+});
+
+describe("search_composio_catalog", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns not configured when no API key", async () => {
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(null);
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = await tools.search_composio_catalog.execute!(
+      { query: "email", limit: 10 },
+      toolOpts,
+    );
+    expect(z.string().parse(result)).toContain("not configured");
+  });
+
+  it("searches toolkit metadata by keyword", async () => {
+    const meta = new Map([
+      ["gmail", { slug: "gmail", name: "Gmail", description: "Google email service" }],
+      ["outlook", { slug: "outlook", name: "Outlook", description: "Microsoft email" }],
+      ["slack", { slug: "slack", name: "Slack", description: "Team messaging" }],
+    ]);
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(mockClient({ meta }));
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(await tools.search_composio_catalog.execute!({ query: "email", limit: 10 }, toolOpts));
+    expect(result).toContain("gmail");
+    expect(result).toContain("outlook");
+    expect(result).not.toContain("slack");
+  });
+
+  it("respects limit parameter", async () => {
+    const meta = new Map([
+      ["a", { slug: "a", name: "A Tool", description: "test" }],
+      ["b", { slug: "b", name: "B Tool", description: "test" }],
+      ["c", { slug: "c", name: "C Tool", description: "test" }],
+    ]);
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(mockClient({ meta }));
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(await tools.search_composio_catalog.execute!({ query: "test", limit: 2 }, toolOpts));
+    const lines = result.split("\n").filter((l) => l.startsWith("•"));
+    expect(lines).toHaveLength(2);
+  });
+
+  it("returns no results message for unmatched query", async () => {
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(
+      mockClient({ meta: new Map() }),
+    );
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(await tools.search_composio_catalog.execute!({ query: "zzzzz", limit: 10 }, toolOpts));
+    expect(result).toContain("No toolkits found");
+  });
+});
+
+describe("inspect_toolkit", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("returns not configured when no API key", async () => {
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(null);
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = await tools.inspect_toolkit.execute!(
+      { slug: "gmail", includeTools: false },
+      toolOpts,
+    );
+    expect(z.string().parse(result)).toContain("not configured");
+  });
+
+  it("returns toolkit info with connection status", async () => {
+    const meta = new Map([
+      ["gmail", { slug: "gmail", name: "Gmail", description: "Email", toolsCount: 42 }],
+    ]);
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(
+      mockClient({
+        meta,
+        connected: [{ slug: "gmail", status: "ACTIVE", accountLabel: "me@gmail.com" }],
+      }),
+    );
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(
+        await tools.inspect_toolkit.execute!({ slug: "gmail", includeTools: false }, toolOpts),
+      );
+    expect(result).toContain("Gmail");
+    expect(result).toContain("Email");
+    expect(result).toContain("yes (1 account)");
+    expect(result).toContain("me@gmail.com");
+    expect(result).toContain("42");
+  });
+
+  it("returns not found for unknown toolkit", async () => {
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(
+      mockClient({ meta: new Map() }),
+    );
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(
+        await tools.inspect_toolkit.execute!(
+          { slug: "nonexistent", includeTools: false },
+          toolOpts,
+        ),
+      );
+    expect(result).toContain("not found");
+  });
+
+  it("includes tool list when includeTools is true", async () => {
+    const meta = new Map([["slack", { slug: "slack", name: "Slack", description: "Messaging" }]]);
+    const client = mockClient({
+      meta,
+      connected: [],
+      tools: [
+        { slug: "SLACK_SEND", name: "Send Message", description: "Post to a channel" },
+        { slug: "SLACK_LIST", name: "List Channels" },
+      ],
+    });
+    vi.spyOn(composioModule, "createComposioClient").mockReturnValue(client);
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(await tools.inspect_toolkit.execute!({ slug: "slack", includeTools: true }, toolOpts));
+    expect(result).toContain("Send Message");
+    expect(result).toContain("Post to a channel");
+    expect(result).toContain("List Channels");
+    expect(client.listToolsForToolkit).toHaveBeenCalledWith("slack");
   });
 });

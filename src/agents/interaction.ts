@@ -2,19 +2,19 @@ import { DurableObject } from "cloudflare:workers";
 import { generateText, type ModelMessage, stepCountIs } from "ai";
 import { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import type { EventData, EventName } from "@/lib/events";
+import { broadcastEventSchema } from "@/lib/events";
+import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
+import { cleanMemories } from "@/memory/clean";
+import { extractAndStore } from "@/memory/extract";
+import { randomId } from "@/memory/types";
+import { createAckTools } from "@/tools/ack";
+import { createAutomationTools } from "@/tools/automations";
+import { createDraftDecisionTools } from "@/tools/drafts";
+import { createMemoryTools } from "@/tools/memory";
+import { createSelfTools } from "@/tools/self";
+import { createSpawnTools } from "@/tools/spawn";
 import { api } from "../../convex/_generated/api";
-import type { EventData, EventName } from "../lib/events";
-import { broadcastEventSchema } from "../lib/events";
-import { createProvider } from "../lib/llm";
-import { cleanMemories } from "../memory/clean";
-import { extractAndStore } from "../memory/extract";
-import { randomId } from "../memory/types";
-import { createAckTools } from "../tools/ack";
-import { createAutomationTools } from "../tools/automations";
-import { createDraftDecisionTools } from "../tools/drafts";
-import { createMemoryTools } from "../tools/memory";
-import { createSelfTools } from "../tools/self";
-import { createSpawnTools } from "../tools/spawn";
 
 const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const STALE_AGENT_MS = 15 * 60 * 1000;
@@ -299,6 +299,7 @@ export class BoopInteractionAgent extends DurableObject<Env> {
         messages,
         tools,
         stopWhen: stepCountIs(10),
+        headers: gatewayMetadataHeader({ source: "dispatcher", conversationId, turnId }),
       });
 
       const reply = result.text.trim() || "(no reply)";

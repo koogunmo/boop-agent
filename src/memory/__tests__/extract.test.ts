@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { GatewayMetadata } from "@/lib/llm";
 import type { MockConvex } from "@/lib/test-helpers";
 import { cvx, mockConvex, testEnv } from "@/lib/test-helpers";
 import { extractAndStore } from "@/memory/extract";
@@ -33,6 +34,9 @@ vi.mock("@/lib/llm", () => ({
       }),
     doStream: () => Promise.reject(new Error("not implemented")),
   }),
+  gatewayMetadataHeader: (metadata: Record<string, unknown>) => ({
+    "cf-aig-metadata": JSON.stringify(metadata),
+  }),
 }));
 
 function baseOpts(convex: MockConvex) {
@@ -48,6 +52,27 @@ function baseOpts(convex: MockConvex) {
 
 describe("extractAndStore", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it("passes gateway metadata header with source, conversationId, turnId", async () => {
+    const { generateText } = await import("ai");
+    const generateTextMock = vi.mocked(generateText);
+    generateTextMock.mockResolvedValue({
+      text: JSON.stringify({ facts: [] }),
+      usage: { inputTokens: 10, outputTokens: 5 },
+    } as never);
+
+    const convex = mockConvex();
+    await extractAndStore(baseOpts(convex));
+
+    expect(generateTextMock).toHaveBeenCalledOnce();
+    const callArgs = generateTextMock.mock.calls[0]![0] as { headers: Record<string, string> };
+    const expected: GatewayMetadata = {
+      source: "extract",
+      conversationId: "test:extract",
+      turnId: "turn_123",
+    };
+    expect(callArgs.headers["cf-aig-metadata"]).toBe(JSON.stringify(expected));
+  });
 
   it("stores extracted facts and emits memory.extracted event", async () => {
     const { generateText } = await import("ai");

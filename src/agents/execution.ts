@@ -1,13 +1,16 @@
 import { DurableObject } from "cloudflare:workers";
 import { DynamicWorkerExecutor } from "@cloudflare/codemode";
 import { createCodeTool } from "@cloudflare/codemode/ai";
-import { generateText, stepCountIs } from "ai";
+import { stepCountIs, streamText } from "ai";
 import { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import { createComposioClient } from "@/lib/composio";
+import { buildComposioTools } from "@/lib/composio-tools";
+import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
+import { extractAccounts, type ToolArgs, type ToolCallLogger } from "@/lib/tool-logger";
+import { createWebTools } from "@/lib/web-tools";
+import { createDraftStagingTools } from "@/tools/drafts";
 import { api } from "../../convex/_generated/api";
-import { createProvider } from "../lib/llm";
-import { createWebTools } from "../lib/web-tools";
-import { createDraftStagingTools } from "../tools/drafts";
 
 const EXECUTION_SYSTEM = `You are a focused background worker for the user.
 
@@ -49,6 +52,7 @@ const runTaskSchema = z.object({
   conversationId: z.string().min(1),
   name: z.string().optional(),
   agentId: z.string().min(1),
+  toolHint: z.string().optional(),
 });
 
 export class BoopExecutionAgent extends DurableObject<Env> {
@@ -84,11 +88,18 @@ export class BoopExecutionAgent extends DurableObject<Env> {
     return new Response("not found", { status: 404 });
   }
 
-  private async buildIntegrationTools(_integrations: string[]): Promise<Record<string, never>> {
-    // Phase 4: dynamically build Composio tools per integration slug.
-    // Each integration in the array maps to a Composio toolkit session
-    // whose tools get converted to AI SDK tools.
-    return {};
+  private async buildIntegrationTools(
+    integrations: string[],
+    logger: ToolCallLogger,
+    toolHint?: string,
+  ): Promise<Record<string, Awaited<ReturnType<typeof buildComposioTools>>[string]>> {
+    if (integrations.length === 0) return {};
+    const client = createComposioClient(this.env);
+    if (!client) {
+      console.warn("[exec] Composio not configured, skipping integration tools");
+      return {};
+    }
+    return buildComposioTools(client, integrations, logger, toolHint);
   }
 
   private async runTask(opts: z.infer<typeof runTaskSchema>): Promise<{
@@ -100,17 +111,59 @@ export class BoopExecutionAgent extends DurableObject<Env> {
     const name = opts.name ?? (integrations.join("+") || "general");
     const convex = this.convex;
     const started = Date.now();
+    const shortId = agentId.slice(-6);
+    const log = (msg: string) => console.log(`[agent ${shortId}] ${msg}`);
+
+    const taskPreview = task.length > 120 ? `${task.slice(0, 120)}…` : task;
+    const hintStr = opts.toolHint ? ` hint="${opts.toolHint}"` : "";
+    log(
+      `spawn: ${name} [${integrations.join(", ") || "no integrations"}]${hintStr} — ${JSON.stringify(taskPreview)}`,
+    );
 
     await convex.mutation(api.agents.update, { agentId, status: "running" });
 
-    const provider = createProvider(this.env);
-    const webTools = createWebTools(this.env);
-    const draftTools = createDraftStagingTools({ convex, conversationId });
+    const interactionId = this.env.BOOP_AGENT.idFromName(conversationId);
+    const interactionStub = this.env.BOOP_AGENT.get(interactionId);
 
-    // Build tool set dynamically per spawn.
-    // Web + draft tools are always available.
-    // Integration tools (Composio) will be added per-integration in Phase 4.
-    const integrationTools = await this.buildIntegrationTools(integrations);
+    function broadcastEvent(event: string, data: Record<string, unknown>) {
+      interactionStub
+        .fetch("http://agent/broadcast", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event, data }),
+        })
+        .catch(() => {});
+    }
+
+    const logger: ToolCallLogger = {
+      async onToolCall(toolName, args) {
+        const accounts = extractAccounts(args);
+        const acctSuffix = accounts.length ? ` [${accounts.join(", ")}]` : "";
+        log(`tool: ${toolName}${acctSuffix}`);
+        await convex.mutation(api.agents.addLog, {
+          agentId,
+          logType: "tool_use",
+          toolName,
+          ...(accounts.length ? { accounts } : {}),
+          content: JSON.stringify(args).slice(0, 2000),
+        });
+        broadcastEvent("agent_tool", { agentId, toolName });
+      },
+      async onToolResult(toolName, result) {
+        await convex.mutation(api.agents.addLog, {
+          agentId,
+          logType: "tool_result",
+          toolName,
+          content: String(result).slice(0, 2000),
+        });
+      },
+    };
+
+    const provider = createProvider(this.env);
+    const webTools = createWebTools(this.env, logger);
+    const draftTools = createDraftStagingTools({ convex, conversationId, logger });
+    const integrationTools = await this.buildIntegrationTools(integrations, logger, opts.toolHint);
+
     const allTools = {
       ...webTools,
       ...draftTools,
@@ -120,6 +173,8 @@ export class BoopExecutionAgent extends DurableObject<Env> {
     let buffer = "";
     let status: "completed" | "failed" | "cancelled" = "completed";
     let errorMsg: string | undefined;
+    let inputTokens = 0;
+    let outputTokens = 0;
 
     try {
       const executor = new DynamicWorkerExecutor({
@@ -133,72 +188,65 @@ export class BoopExecutionAgent extends DurableObject<Env> {
         executor,
       });
 
-      const result = await generateText({
+      const stream = streamText({
         model: provider(this.env.MODEL_EXECUTOR),
         system: EXECUTION_SYSTEM,
         prompt: task,
         tools: { codemode },
         stopWhen: stepCountIs(5),
+        headers: gatewayMetadataHeader({ source: "execution", agentId, conversationId }),
         ...(this.abortController ? { abortSignal: this.abortController.signal } : {}),
-        onStepFinish: async (step) => {
-          const interactionId = this.env.BOOP_AGENT.idFromName(conversationId);
-          const interactionStub = this.env.BOOP_AGENT.get(interactionId);
-
-          for (const toolCall of step.toolCalls) {
+        onChunk: async ({ chunk }) => {
+          if (chunk.type === "text-delta") {
+            buffer += chunk.text;
+            await convex.mutation(api.agents.addLog, {
+              agentId,
+              logType: "text",
+              content: chunk.text,
+            });
+          } else if (chunk.type === "tool-call") {
+            const input = chunk.input;
+            const accounts =
+              input && typeof input === "object" && !Array.isArray(input)
+                ? extractAccounts(input as ToolArgs)
+                : [];
+            log(`codemode: ${chunk.toolName}${accounts.length ? ` [${accounts.join(", ")}]` : ""}`);
             await convex.mutation(api.agents.addLog, {
               agentId,
               logType: "tool_use",
-              toolName: toolCall.toolName,
-              content: JSON.stringify(toolCall.input).slice(0, 2000),
+              toolName: chunk.toolName,
+              ...(accounts.length ? { accounts } : {}),
+              content: JSON.stringify(chunk.input).slice(0, 2000),
             });
-            interactionStub
-              .fetch("http://agent/broadcast", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  event: "agent_tool",
-                  data: { agentId, toolName: toolCall.toolName },
-                }),
-              })
-              .catch(() => {});
-          }
-          for (const toolResult of step.toolResults) {
+          } else if (chunk.type === "tool-result") {
             await convex.mutation(api.agents.addLog, {
               agentId,
               logType: "tool_result",
-              content: String(toolResult.output).slice(0, 2000),
+              content: String(chunk.output).slice(0, 2000),
             });
           }
         },
+        onFinish: async ({ usage }) => {
+          inputTokens = usage.inputTokens ?? 0;
+          outputTokens = usage.outputTokens ?? 0;
+        },
       });
 
-      buffer = result.text;
-
-      if (buffer) {
-        await convex.mutation(api.agents.addLog, {
-          agentId,
-          logType: "text",
-          content: buffer.slice(0, 2000),
-        });
-      }
-
-      if (result.usage) {
-        await convex.mutation(api.usageRecords.record, {
-          source: "execution",
-          conversationId,
-          agentId,
-          model: this.env.MODEL_EXECUTOR,
-          inputTokens: result.usage.inputTokens ?? 0,
-          outputTokens: result.usage.outputTokens ?? 0,
-          cacheReadTokens: 0,
-          cacheCreationTokens: 0,
-          costUsd: 0,
-          durationMs: Date.now() - started,
-        });
-      }
+      await stream.consumeStream();
+      buffer = await stream.text;
     } catch (err) {
       status = this.abortController?.signal.aborted ? "cancelled" : "failed";
-      errorMsg = String(err);
+      const errObj = err as {
+        message?: string;
+        statusCode?: number;
+        responseBody?: string;
+        url?: string;
+      };
+      const parts = [errObj.message ?? String(err)];
+      if (errObj.statusCode) parts.push(`status=${errObj.statusCode}`);
+      if (errObj.url) parts.push(`url=${errObj.url}`);
+      if (errObj.responseBody) parts.push(`body=${errObj.responseBody}`);
+      errorMsg = parts.join(" | ");
       await convex.mutation(api.agents.addLog, {
         agentId,
         logType: "error",
@@ -207,13 +255,36 @@ export class BoopExecutionAgent extends DurableObject<Env> {
     }
 
     const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-    console.log(`[agent ${agentId.slice(-6)} ${name}] done (${status}, ${elapsed}s)`);
+    log(`done (${status}, ${elapsed}s, in/out ${inputTokens}/${outputTokens})`);
 
     await convex.mutation(api.agents.update, {
       agentId,
       status,
       result: buffer,
       ...(errorMsg ? { error: errorMsg } : {}),
+      inputTokens,
+      outputTokens,
+    });
+
+    if (inputTokens > 0 || outputTokens > 0) {
+      await convex.mutation(api.usageRecords.record, {
+        source: "execution",
+        conversationId,
+        agentId,
+        model: this.env.MODEL_EXECUTOR,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        costUsd: 0,
+        durationMs: Date.now() - started,
+      });
+    }
+
+    broadcastEvent("agent_done", {
+      agentId,
+      status,
+      result: buffer.slice(0, 200),
     });
 
     return { agentId, result: buffer || errorMsg || "(no output)", status };

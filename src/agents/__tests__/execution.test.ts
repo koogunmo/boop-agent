@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import * as ai from "ai";
+import { describe, expect, it, vi } from "vitest";
+import type { GatewayMetadata } from "@/lib/llm";
 
 function getStub(name: string) {
   return env.EXEC_AGENT.get(env.EXEC_AGENT.idFromName(name));
@@ -76,6 +78,36 @@ describe("BoopExecutionAgent DO", () => {
       }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("passes gateway metadata header to streamText", { timeout: 15000 }, async () => {
+    const streamTextSpy = vi.spyOn(ai, "streamText").mockReturnValue({
+      consumeStream: () => Promise.resolve(),
+      text: Promise.resolve("mocked result"),
+    } as unknown as ReturnType<typeof ai.streamText>);
+
+    const res = await getStub("t-exec-meta").fetch("http://agent/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        task: "test task",
+        integrations: [],
+        conversationId: "conv_meta",
+        agentId: "agent_meta",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(streamTextSpy).toHaveBeenCalledOnce();
+    const callArgs = streamTextSpy.mock.calls[0]![0] as { headers: Record<string, string> };
+    const metadata: GatewayMetadata = JSON.parse(callArgs.headers["cf-aig-metadata"] ?? "{}");
+    expect(metadata).toEqual({
+      source: "execution",
+      conversationId: "conv_meta",
+      agentId: "agent_meta",
+    } satisfies GatewayMetadata);
+
+    streamTextSpy.mockRestore();
   });
 
   it("cancel endpoint returns cancelled:false when no task running", async () => {

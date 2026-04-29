@@ -2,9 +2,9 @@ import { zValidator } from "@hono/zod-validator";
 import { ConvexHttpClient } from "convex/browser";
 import { Hono } from "hono";
 import { z } from "zod";
+import { dispatchToAgent } from "@/lib/agent-dispatch";
+import { sendImessage, startTypingLoop } from "@/lib/sendblue";
 import { api } from "../../convex/_generated/api";
-import { dispatchToAgent } from "../lib/agent-dispatch";
-import { sendImessage, startTypingLoop } from "../lib/sendblue";
 
 const webhookBody = z.object({
   content: z.string().optional(),

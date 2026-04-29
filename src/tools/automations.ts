@@ -2,8 +2,8 @@ import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { Cron } from "croner";
 import { z } from "zod";
+import { randomId } from "@/memory/types";
 import { api } from "../../convex/_generated/api";
-import { randomId } from "../memory/types";
 
 interface AutomationToolDeps {
   convex: ConvexHttpClient;

@@ -1,6 +1,6 @@
 import type { ConvexHttpClient } from "convex/browser";
+import { ARCHIVE_THRESHOLD, effectiveScore, PRUNE_THRESHOLD } from "@/memory/types";
 import { api } from "../../convex/_generated/api";
-import { ARCHIVE_THRESHOLD, effectiveScore, PRUNE_THRESHOLD } from "./types";
 
 interface CleanResult {
   scanned: number;

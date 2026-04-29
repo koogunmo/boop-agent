@@ -1,8 +1,9 @@
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import { createComposioClient, FEATURED_SLUGS } from "@/lib/composio";
+import { embeddingsAvailable } from "@/lib/embeddings";
 import { api } from "../../convex/_generated/api";
-import { embeddingsAvailable } from "../lib/embeddings";
 
 const KNOWN_MODELS = new Set<string>([
   "workers-ai/@cf/moonshotai/kimi-k2.6",
@@ -40,6 +41,7 @@ interface SelfToolDeps {
 
 export function createSelfTools(deps: SelfToolDeps) {
   const { convex, env } = deps;
+  const composioClient = createComposioClient(env);
 
   return {
     get_config: tool({
@@ -106,7 +108,23 @@ Cost note (approximate, per 1M output tokens): Opus 4.7 ≈ $75, Sonnet 4.6 ≈ 
         "List the user's currently connected integrations (Gmail, Slack, etc.) with the actual account behind each connection. Use when the user asks 'what tools do I have connected?' or 'which Gmail account?' or 'what integrations are set up?'.",
       inputSchema: z.object({}),
       execute: async () => {
-        return "Composio not yet available (Phase 4).";
+        if (!composioClient) return "Composio is not configured (no API key).";
+
+        const [connected, meta] = await Promise.all([
+          composioClient.listConnectedToolkits(),
+          composioClient.listToolkitMeta(),
+        ]);
+        const active = connected.filter((c) => c.status === "ACTIVE");
+        if (active.length === 0) {
+          return "No integrations connected. The user can connect toolkits from the dashboard.";
+        }
+
+        const lines = active.map((c) => {
+          const name = meta.get(c.slug)?.name ?? c.slug;
+          const label = c.accountLabel ?? c.alias ?? "unknown account";
+          return `• ${name} — ${label}`;
+        });
+        return lines.join("\n");
       },
     }),
 
@@ -121,8 +139,31 @@ Cost note (approximate, per 1M output tokens): Opus 4.7 ≈ $75, Sonnet 4.6 ≈ 
           ),
         limit: z.number().int().min(1).max(50).optional().default(15),
       }),
-      execute: async () => {
-        return "Composio not yet available (Phase 4).";
+      execute: async (args) => {
+        if (!composioClient) return "Composio is not configured (no API key).";
+
+        const meta = await composioClient.listToolkitMeta();
+        const q = args.query.toLowerCase();
+        const matches: Array<{ slug: string; name: string; description?: string | undefined }> = [];
+
+        for (const [, m] of meta) {
+          if (
+            m.slug.includes(q) ||
+            m.name.toLowerCase().includes(q) ||
+            m.description?.toLowerCase().includes(q)
+          ) {
+            matches.push({ slug: m.slug, name: m.name, description: m.description });
+          }
+          if (matches.length >= args.limit) break;
+        }
+
+        if (matches.length === 0) {
+          return `No toolkits found matching "${args.query}". Try a broader keyword.`;
+        }
+
+        return matches
+          .map((m) => `• ${m.slug} — ${m.name}${m.description ? `: ${m.description}` : ""}`)
+          .join("\n");
       },
     }),
 
@@ -139,8 +180,41 @@ Cost note (approximate, per 1M output tokens): Opus 4.7 ≈ $75, Sonnet 4.6 ≈ 
           .default(false)
           .describe("If true, also fetch the toolkit's tool list (slower)."),
       }),
-      execute: async () => {
-        return "Composio not yet available (Phase 4).";
+      execute: async (args) => {
+        if (!composioClient) return "Composio is not configured (no API key).";
+
+        const meta = await composioClient.listToolkitMeta();
+        const m = meta.get(args.slug);
+        if (!m) return `Toolkit "${args.slug}" not found in catalog.`;
+
+        const connected = await composioClient.listConnectedToolkits();
+        const conns = connected.filter((c) => c.slug === args.slug && c.status === "ACTIVE");
+
+        const lines = [
+          `**${m.name}** (\`${m.slug}\`)`,
+          m.description ? `Description: ${m.description}` : null,
+          FEATURED_SLUGS.has(args.slug) ? "Featured: yes" : null,
+          `Connected: ${conns.length > 0 ? `yes (${conns.length} account${conns.length > 1 ? "s" : ""})` : "no"}`,
+          m.toolsCount ? `Tools available: ${m.toolsCount}` : null,
+        ];
+
+        if (conns.length > 0) {
+          for (const c of conns) {
+            lines.push(`  • ${c.accountLabel ?? c.alias ?? c.connectionId}`);
+          }
+        }
+
+        if (args.includeTools) {
+          const tools = await composioClient.listToolsForToolkit(args.slug);
+          if (tools.length > 0) {
+            lines.push("", "Tools:");
+            for (const t of tools) {
+              lines.push(`  • ${t.name}${t.description ? ` — ${t.description}` : ""}`);
+            }
+          }
+        }
+
+        return lines.filter(Boolean).join("\n");
       },
     }),
   };

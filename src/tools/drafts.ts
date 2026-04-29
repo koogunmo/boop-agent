@@ -1,17 +1,19 @@
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import type { ToolCallLogger } from "@/lib/tool-logger";
+import { randomId } from "@/memory/types";
 import { api } from "../../convex/_generated/api";
-import { randomId } from "../memory/types";
 
 interface DraftToolDeps {
   convex: ConvexHttpClient;
   conversationId: string;
   env?: Env;
+  logger?: ToolCallLogger;
 }
 
 export function createDraftStagingTools(deps: DraftToolDeps) {
-  const { convex, conversationId } = deps;
+  const { convex, conversationId, logger } = deps;
 
   return {
     save_draft: tool({
@@ -27,6 +29,7 @@ ALWAYS call this instead of sending or creating something directly. The user wil
         payload: z.string().describe("JSON string with the data needed to execute."),
       }),
       execute: async (args) => {
+        await logger?.onToolCall("save_draft", args);
         const draftId = randomId("draft");
         await convex.mutation(api.drafts.create, {
           draftId,
@@ -35,7 +38,9 @@ ALWAYS call this instead of sending or creating something directly. The user wil
           summary: args.summary,
           payload: args.payload,
         });
-        return `Draft saved as ${draftId}. Surface the summary to the user and ask them to confirm "send" or "cancel".`;
+        const result = `Draft saved as ${draftId}. Surface the summary to the user and ask them to confirm "send" or "cancel".`;
+        await logger?.onToolResult("save_draft", result);
+        return result;
       },
     }),
   };

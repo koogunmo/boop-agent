@@ -2,6 +2,7 @@ import { SerperClient } from "@agentic/serper";
 import { tool } from "ai";
 import { NodeHtmlMarkdown } from "node-html-markdown-cloudflare";
 import { z } from "zod";
+import type { ToolCallLogger } from "@/lib/tool-logger";
 
 function getSerper(env: Env): SerperClient {
   return new SerperClient({ apiKey: env.SERPER_API_KEY });
@@ -53,7 +54,7 @@ async function fetchWithHtmlParser(url: string): Promise<string> {
   return NodeHtmlMarkdown.translate(html);
 }
 
-export function createWebTools(env: Env) {
+export function createWebTools(env: Env, logger?: ToolCallLogger) {
   return {
     web_search: tool({
       description:
@@ -69,10 +70,15 @@ export function createWebTools(env: Env) {
         num: z.number().int().min(1).max(100).optional().describe("Number of results per page."),
       }),
       execute: async (params) => {
+        await logger?.onToolCall("web_search", params);
         try {
-          return await getSerper(env).search(params);
+          const result = await getSerper(env).search(params);
+          await logger?.onToolResult("web_search", result);
+          return result;
         } catch (err) {
-          return `Search failed: ${String(err)}`;
+          const errMsg = `Search failed: ${String(err)}`;
+          await logger?.onToolResult("web_search", errMsg);
+          return errMsg;
         }
       },
     }),
@@ -89,13 +95,18 @@ export function createWebTools(env: Env) {
           .describe("Use headless browser rendering for JS-heavy pages. Slower but handles SPAs."),
       }),
       execute: async ({ url, render }) => {
+        await logger?.onToolCall("web_fetch", { url, render });
         try {
-          if (render && env.CF_BROWSER_TOKEN) {
-            return await fetchWithBrowserRendering(url, env);
-          }
-          return await fetchWithHtmlParser(url);
+          const result =
+            render && env.CF_BROWSER_TOKEN
+              ? await fetchWithBrowserRendering(url, env)
+              : await fetchWithHtmlParser(url);
+          await logger?.onToolResult("web_fetch", result);
+          return result;
         } catch (err) {
-          return `Failed to fetch ${url}: ${String(err)}`;
+          const errMsg = `Failed to fetch ${url}: ${String(err)}`;
+          await logger?.onToolResult("web_fetch", errMsg);
+          return errMsg;
         }
       },
     }),

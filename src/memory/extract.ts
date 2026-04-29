@@ -1,11 +1,11 @@
 import { generateText } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import { embed } from "@/lib/embeddings";
+import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
+import type { MemorySegment } from "@/memory/types";
+import { makeMemoryId, SEGMENT_DEFAULTS } from "@/memory/types";
 import { api } from "../../convex/_generated/api";
-import { embed } from "../lib/embeddings";
-import { createProvider } from "../lib/llm";
-import type { MemorySegment } from "./types";
-import { makeMemoryId, SEGMENT_DEFAULTS } from "./types";
 
 const EXTRACTION_PROMPT = `You are a memory-extraction subagent.
 
@@ -79,6 +79,7 @@ export async function extractAndStore(opts: ExtractOpts): Promise<void> {
       system: EXTRACTION_PROMPT,
       prompt: payload,
       maxOutputTokens: 1024,
+      headers: gatewayMetadataHeader({ source: "extract", conversationId, turnId }),
     });
 
     if (result.usage) {

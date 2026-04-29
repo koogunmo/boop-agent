@@ -1,9 +1,9 @@
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import type { BroadcastFn } from "@/lib/events";
+import { randomId } from "@/memory/types";
 import { api } from "../../convex/_generated/api";
-import type { BroadcastFn } from "../lib/events";
-import { randomId } from "../memory/types";
 
 interface SpawnToolDeps {
   convex: ConvexHttpClient;
@@ -25,6 +25,12 @@ export function createSpawnTools(deps: SpawnToolDeps) {
           .describe("Crisp task description — what to find/draft/do, not the raw user message."),
         integrations: z.array(z.string()).describe("Which integrations to give the agent."),
         name: z.string().optional().describe("Short label for the agent."),
+        toolHint: z
+          .string()
+          .optional()
+          .describe(
+            "2-4 keyword hint for selecting the right integration tools, e.g. 'fetch emails', 'send message', 'list calendar events'. Helps the agent load only relevant tools instead of the full toolkit.",
+          ),
       }),
       execute: async (args) => {
         const agentId = randomId("agent");
@@ -49,6 +55,7 @@ export function createSpawnTools(deps: SpawnToolDeps) {
             conversationId,
             name,
             agentId,
+            toolHint: args.toolHint,
           }),
         });
 

@@ -1,9 +1,11 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import * as ai from "ai";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { BoopInteractionAgent } from "@/agents/interaction";
 import app from "@/index";
+import type { GatewayMetadata } from "@/lib/llm";
 import { injectMocksIntoDO, injectMocksWithErrorIntoDO, mockConvex } from "@/lib/test-helpers";
 
 const healthResponse = z.object({ ok: z.boolean(), service: z.string() });
@@ -154,6 +156,7 @@ describe("BoopInteractionAgent DO", () => {
   it("handles /handle POST: queries history, calls LLM, saves messages, returns reply", {
     timeout: 15000,
   }, async () => {
+    const generateTextSpy = vi.spyOn(ai, "generateText");
     const convex = mockConvex([]);
     const stub = getStub("t-handle");
     await injectMocksIntoDO(stub, convex, "mocked reply");
@@ -186,6 +189,16 @@ describe("BoopInteractionAgent DO", () => {
       role: "assistant",
       content: "mocked reply",
     });
+
+    const callArgs = generateTextSpy.mock.calls[0]![0] as { headers: Record<string, string> };
+    const metadata: GatewayMetadata = JSON.parse(callArgs.headers["cf-aig-metadata"] ?? "{}");
+    expect(metadata).toMatchObject({
+      source: "dispatcher",
+      conversationId: "test:do",
+    });
+    expect(metadata.source === "dispatcher" && metadata.turnId).toMatch(/^turn_/);
+
+    generateTextSpy.mockRestore();
   });
 
   it("includes conversation history and filters system messages", async () => {

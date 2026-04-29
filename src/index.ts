@@ -2,12 +2,13 @@ import { ConvexHttpClient } from "convex/browser";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
+import { chat } from "@/routes/chat";
+import { composio } from "@/routes/composio";
+import { sendblue } from "@/routes/sendblue";
 import { api } from "../convex/_generated/api";
-import { chat } from "./routes/chat";
-import { sendblue } from "./routes/sendblue";
 
-export { BoopExecutionAgent } from "./agents/execution";
-export { BoopInteractionAgent } from "./agents/interaction";
+export { BoopExecutionAgent } from "@/agents/execution";
+export { BoopInteractionAgent } from "@/agents/interaction";
 
 const agentIdSchema = z.object({ id: z.string().min(1) });
 
@@ -83,6 +84,7 @@ const app = new Hono<{ Bindings: Env }>()
   })
 
   .route("/sendblue", sendblue)
-  .route("/chat", chat);
+  .route("/chat", chat)
+  .route("/composio", composio);
 
 export default app;

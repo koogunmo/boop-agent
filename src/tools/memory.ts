@@ -1,10 +1,10 @@
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
+import { embed, embeddingsAvailable } from "@/lib/embeddings";
+import type { MemorySegment, MemoryTier } from "@/memory/types";
+import { DEFAULT_DECAY, makeMemoryId, SEGMENT_DEFAULTS } from "@/memory/types";
 import { api } from "../../convex/_generated/api";
-import { embed, embeddingsAvailable } from "../lib/embeddings";
-import type { MemorySegment, MemoryTier } from "../memory/types";
-import { DEFAULT_DECAY, makeMemoryId, SEGMENT_DEFAULTS } from "../memory/types";
 
 const tierEnum = z.enum(["short", "long", "permanent"]);
 const segmentEnum = z.enum([
