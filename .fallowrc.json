@@ -11,7 +11,7 @@
     "worker-configuration.d.ts"
   ],
   "usedClassMembers": [
-    { "extends": "DurableObject", "members": ["fetch", "webSocketMessage", "webSocketClose", "alarm"] }
+    { "extends": "Agent", "members": ["onStart", "onRequest", "onConnect", "options", "sweepStaleAgents", "cleanMemories", "runConsolidation", "runAutomation", "backfillCosts", "broadcastEvent"] }
   ],
   "rules": {
     "unused-dependencies": "warn"
@@ -29,6 +29,26 @@
       "unusedClassMembers": 0,
       "unresolvedImports": 0,
       "unlistedDependencies": 0,
+      "duplicateExports": 0,
+      "circularDependencies": 0,
+      "typeOnlyDependencies": 0,
+      "testOnlyDependencies": 0,
+      "boundaryViolations": 0
+    }
+  },
+  "regression": {
+    "baseline":     {
+      "totalIssues": 8,
+      "unusedFiles": 0,
+      "unusedExports": 0,
+      "unusedTypes": 0,
+      "unusedDependencies": 3,
+      "unusedDevDependencies": 4,
+      "unusedOptionalDependencies": 0,
+      "unusedEnumMembers": 0,
+      "unusedClassMembers": 0,
+      "unresolvedImports": 0,
+      "unlistedDependencies": 1,
       "duplicateExports": 0,
       "circularDependencies": 0,
       "typeOnlyDependencies": 0,

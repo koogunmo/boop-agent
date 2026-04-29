@@ -150,3 +150,19 @@ export const recentRuns = query({
     return await ctx.db.query("automationRuns").order("desc").take(limit);
   },
 });
+
+export const setScheduleId = mutation({
+  args: {
+    automationId: v.string(),
+    scheduleId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const auto = await ctx.db
+      .query("automations")
+      .withIndex("by_automation_id", (q) => q.eq("automationId", args.automationId))
+      .unique();
+    if (!auto) return null;
+    await ctx.db.patch(auto._id, { scheduleId: args.scheduleId });
+    return auto._id;
+  },
+});

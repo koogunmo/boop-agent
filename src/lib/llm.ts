@@ -11,7 +11,10 @@ export function createProvider(env: Env) {
 export type GatewayMetadata =
   | { source: "dispatcher"; conversationId: string; turnId: string }
   | { source: "execution"; conversationId: string; agentId: string }
-  | { source: "extract"; conversationId: string; turnId: string };
+  | { source: "extract"; conversationId: string; turnId: string }
+  | { source: "consolidation-proposer"; conversationId: string; runId: string }
+  | { source: "consolidation-adversary"; conversationId: string; runId: string }
+  | { source: "consolidation-judge"; conversationId: string; runId: string };
 
 export function gatewayMetadataHeader(metadata: GatewayMetadata): Record<string, string> {
   return { "cf-aig-metadata": JSON.stringify(metadata) };

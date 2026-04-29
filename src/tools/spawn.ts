@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
+import { getServerByName } from "partyserver";
 import { z } from "zod";
 import type { BroadcastFn } from "@/lib/events";
 import { randomId } from "@/memory/types";
@@ -45,7 +46,7 @@ export function createSpawnTools(deps: SpawnToolDeps) {
         });
         broadcast("agent_spawned", { agentId, name, task: args.task });
 
-        const stub = env.EXEC_AGENT.get(env.EXEC_AGENT.idFromName(agentId));
+        const stub = await getServerByName(env.EXEC_AGENT, agentId);
         const res = await stub.fetch("http://agent/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

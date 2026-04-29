@@ -1,13 +1,14 @@
-import { DurableObject } from "cloudflare:workers";
 import { DynamicWorkerExecutor } from "@cloudflare/codemode";
 import { createCodeTool } from "@cloudflare/codemode/ai";
+import { Agent } from "agents";
 import { stepCountIs, streamText } from "ai";
 import { ConvexHttpClient } from "convex/browser";
+import { getServerByName } from "partyserver";
 import { z } from "zod";
 import { createComposioClient } from "@/lib/composio";
 import { buildComposioTools } from "@/lib/composio-tools";
 import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
-import { extractAccounts, type ToolArgs, type ToolCallLogger } from "@/lib/tool-logger";
+import { extractAccounts, type ToolCallLogger } from "@/lib/tool-logger";
 import { createWebTools } from "@/lib/web-tools";
 import { createDraftStagingTools } from "@/tools/drafts";
 import { api } from "../../convex/_generated/api";
@@ -55,26 +56,20 @@ const runTaskSchema = z.object({
   toolHint: z.string().optional(),
 });
 
-export class BoopExecutionAgent extends DurableObject<Env> {
+export class BoopExecutionAgent extends Agent<Env> {
   private abortController: AbortController | null = null;
+  private _convex: ConvexHttpClient | null = null;
 
   private get convex(): ConvexHttpClient {
-    return new ConvexHttpClient(this.env.CONVEX_URL);
+    this._convex ??= new ConvexHttpClient(this.env.CONVEX_URL);
+    return this._convex;
   }
 
-  async fetch(request: Request): Promise<Response> {
+  onRequest(request: Request): Response | Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/run" && request.method === "POST") {
-      const raw: unknown = await request.json();
-      const parsed = runTaskSchema.safeParse(raw);
-      if (!parsed.success) {
-        return new Response("bad request", { status: 400 });
-      }
-      this.abortController = new AbortController();
-      const result = await this.runTask(parsed.data);
-      this.abortController = null;
-      return Response.json(result);
+      return this.handleRun(request);
     }
 
     if (url.pathname === "/cancel" && request.method === "POST") {
@@ -86,6 +81,18 @@ export class BoopExecutionAgent extends DurableObject<Env> {
     }
 
     return new Response("not found", { status: 404 });
+  }
+
+  private async handleRun(request: Request): Promise<Response> {
+    const raw: unknown = await request.json();
+    const parsed = runTaskSchema.safeParse(raw);
+    if (!parsed.success) {
+      return new Response("bad request", { status: 400 });
+    }
+    this.abortController = new AbortController();
+    const result = await this.runTask(parsed.data);
+    this.abortController = null;
+    return Response.json(result);
   }
 
   private async buildIntegrationTools(
@@ -122,8 +129,7 @@ export class BoopExecutionAgent extends DurableObject<Env> {
 
     await convex.mutation(api.agents.update, { agentId, status: "running" });
 
-    const interactionId = this.env.BOOP_AGENT.idFromName(conversationId);
-    const interactionStub = this.env.BOOP_AGENT.get(interactionId);
+    const interactionStub = await getServerByName(this.env.BOOP_AGENT, conversationId);
 
     function broadcastEvent(event: string, data: Record<string, unknown>) {
       interactionStub
@@ -205,11 +211,7 @@ export class BoopExecutionAgent extends DurableObject<Env> {
               content: chunk.text,
             });
           } else if (chunk.type === "tool-call") {
-            const input = chunk.input;
-            const accounts =
-              input && typeof input === "object" && !Array.isArray(input)
-                ? extractAccounts(input as ToolArgs)
-                : [];
+            const accounts = extractAccounts(chunk.input);
             log(`codemode: ${chunk.toolName}${accounts.length ? ` [${accounts.join(", ")}]` : ""}`);
             await convex.mutation(api.agents.addLog, {
               agentId,
@@ -236,17 +238,20 @@ export class BoopExecutionAgent extends DurableObject<Env> {
       buffer = await stream.text;
     } catch (err) {
       status = this.abortController?.signal.aborted ? "cancelled" : "failed";
-      const errObj = err as {
-        message?: string;
-        statusCode?: number;
-        responseBody?: string;
-        url?: string;
-      };
-      const parts = [errObj.message ?? String(err)];
-      if (errObj.statusCode) parts.push(`status=${errObj.statusCode}`);
-      if (errObj.url) parts.push(`url=${errObj.url}`);
-      if (errObj.responseBody) parts.push(`body=${errObj.responseBody}`);
-      errorMsg = parts.join(" | ");
+      if (err instanceof Error) {
+        const parts = [err.message];
+        const statusCode =
+          "statusCode" in err ? (err as { statusCode: number }).statusCode : undefined;
+        const url = "url" in err ? (err as { url: string }).url : undefined;
+        const responseBody =
+          "responseBody" in err ? (err as { responseBody: string }).responseBody : undefined;
+        if (statusCode) parts.push(`status=${statusCode}`);
+        if (url) parts.push(`url=${url}`);
+        if (responseBody) parts.push(`body=${responseBody}`);
+        errorMsg = parts.join(" | ");
+      } else {
+        errorMsg = String(err);
+      }
       await convex.mutation(api.agents.addLog, {
         agentId,
         logType: "error",

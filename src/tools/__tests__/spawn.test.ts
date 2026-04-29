@@ -21,7 +21,7 @@ describe("spawn_agent", () => {
       .mockResolvedValue(
         Response.json({ agentId: "agent_test", result: "Found 3 emails", status: "completed" }),
       );
-    const mockStub = { fetch: mockStubFetch };
+    const mockStub = { fetch: mockStubFetch, setName: vi.fn() };
     const mockExecAgent = {
       idFromName: vi.fn().mockReturnValue("do-id-123"),
       get: vi.fn().mockReturnValue(mockStub),

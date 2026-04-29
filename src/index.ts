@@ -1,6 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { getServerByName } from "partyserver";
 import { z } from "zod";
 import { chat } from "@/routes/chat";
 import { composio } from "@/routes/composio";
@@ -24,8 +25,7 @@ const app = new Hono<{ Bindings: Env }>()
     if (c.req.header("upgrade") !== "websocket") {
       return c.text("Expected Upgrade: websocket", 426);
     }
-    const id = c.env.BOOP_AGENT.idFromName("default");
-    const stub = c.env.BOOP_AGENT.get(id);
+    const stub = await getServerByName(c.env.BOOP_AGENT, "default");
     return stub.fetch(c.req.raw);
   })
 
@@ -43,8 +43,7 @@ const app = new Hono<{ Bindings: Env }>()
     if (agent.status !== "running") {
       return c.json({ ok: false, reason: `agent status is ${agent.status}` });
     }
-    const execId = c.env.EXEC_AGENT.idFromName(agentId);
-    const execStub = c.env.EXEC_AGENT.get(execId);
+    const execStub = await getServerByName(c.env.EXEC_AGENT, agentId);
     try {
       await execStub.fetch("http://agent/cancel", { method: "POST" });
     } catch {
@@ -66,8 +65,8 @@ const app = new Hono<{ Bindings: Env }>()
       return c.json({ error: "agent not found" }, 404);
     }
 
-    const stub = c.env.EXEC_AGENT.get(c.env.EXEC_AGENT.idFromName(agentId));
-    const res = await stub.fetch("http://agent/run", {
+    const execStub = await getServerByName(c.env.EXEC_AGENT, agentId);
+    const res = await execStub.fetch("http://agent/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -79,6 +78,26 @@ const app = new Hono<{ Bindings: Env }>()
       }),
     });
 
+    const result = await res.json();
+    return c.json(result);
+  })
+
+  .post("/consolidate", async (c) => {
+    const stub = await getServerByName(c.env.BOOP_AGENT, "default");
+    const res = await stub.fetch("http://agent/consolidate", { method: "POST" });
+    const result = await res.json();
+    return c.json(result);
+  })
+
+  .post("/trigger/:method", async (c) => {
+    const method = c.req.param("method");
+    const stub = await getServerByName(c.env.BOOP_AGENT, "default");
+    const body = await c.req.text();
+    const res = await stub.fetch(`http://agent/trigger/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body || "{}",
+    });
     const result = await res.json();
     return c.json(result);
   })

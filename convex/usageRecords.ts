@@ -87,3 +87,41 @@ export const summary = query({
     return { totalCost, bySource, rowCount: rows.length };
   },
 });
+
+export const updateCost = mutation({
+  args: {
+    source: v.string(),
+    turnId: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    agentId: v.optional(v.string()),
+    costUsd: v.number(),
+    cacheReadTokens: v.number(),
+    cacheCreationTokens: v.number(),
+  },
+  handler: async (ctx, args) => {
+    let record = null;
+    if (args.turnId) {
+      record = await ctx.db
+        .query("usageRecords")
+        .withIndex("by_turn", (q) => q.eq("turnId", args.turnId!))
+        .first();
+    } else if (args.agentId) {
+      record = await ctx.db
+        .query("usageRecords")
+        .withIndex("by_agent", (q) => q.eq("agentId", args.agentId!))
+        .first();
+    } else if (args.runId) {
+      record = await ctx.db
+        .query("usageRecords")
+        .filter((q) => q.eq(q.field("runId"), args.runId))
+        .first();
+    }
+    if (!record) return null;
+    await ctx.db.patch(record._id, {
+      costUsd: args.costUsd,
+      cacheReadTokens: args.cacheReadTokens,
+      cacheCreationTokens: args.cacheCreationTokens,
+    });
+    return record._id;
+  },
+});

@@ -1,6 +1,7 @@
-import { DurableObject } from "cloudflare:workers";
+import { Agent } from "agents";
 import { generateText, type ModelMessage, stepCountIs } from "ai";
 import { ConvexHttpClient } from "convex/browser";
+import { type Connection, type ConnectionContext, getServerByName } from "partyserver";
 import { z } from "zod";
 import type { EventData, EventName } from "@/lib/events";
 import { broadcastEventSchema } from "@/lib/events";
@@ -8,6 +9,9 @@ import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
 import { cleanMemories } from "@/memory/clean";
 import { extractAndStore } from "@/memory/extract";
 import { randomId } from "@/memory/types";
+import { runAutomation as runAutomationTask } from "@/scheduling/automations";
+import { runConsolidation } from "@/scheduling/consolidation";
+import { backfillCosts } from "@/scheduling/cost-backfill";
 import { createAckTools } from "@/tools/ack";
 import { createAutomationTools } from "@/tools/automations";
 import { createDraftDecisionTools } from "@/tools/drafts";
@@ -16,7 +20,6 @@ import { createSelfTools } from "@/tools/self";
 import { createSpawnTools } from "@/tools/spawn";
 import { api } from "../../convex/_generated/api";
 
-const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const STALE_AGENT_MS = 15 * 60 * 1000;
 
 const INTERACTION_SYSTEM = `You are Boop, a personal agent the user texts from iMessage.
@@ -110,7 +113,9 @@ const handleRequestSchema = z.object({
   content: z.string().min(1),
 });
 
-export class BoopInteractionAgent extends DurableObject<Env> {
+export class BoopInteractionAgent extends Agent<Env> {
+  static options = { sendIdentityOnConnect: false };
+
   _convex: ConvexHttpClient | null = null;
   _provider: ReturnType<typeof createProvider> | null = null;
 
@@ -124,77 +129,124 @@ export class BoopInteractionAgent extends DurableObject<Env> {
     return this._provider;
   }
 
-  async fetch(request: Request): Promise<Response> {
+  async onStart(): Promise<void> {
+    this.scheduleEvery(60, "sweepStaleAgents");
+    this.schedule("0 */6 * * *", "cleanMemories");
+    this.schedule("0 0 * * *", "runConsolidation");
+    this.schedule("*/5 * * * *", "backfillCosts");
+
+    const all = await this.convex.query(api.automations.list, { enabledOnly: true });
+    const existing = this.getSchedules();
+    const scheduledAutomationIds = new Set(
+      existing
+        .filter((s) => s.callback === "runAutomation")
+        .map((s) => {
+          const payload = s.payload as { automationId?: string } | undefined;
+          return payload?.automationId;
+        })
+        .filter(Boolean),
+    );
+
+    for (const a of all) {
+      if (a.nextRunAt && !scheduledAutomationIds.has(a.automationId)) {
+        const sched = await this.schedule(
+          new Date(a.nextRunAt),
+          "runAutomation",
+          { automationId: a.automationId },
+          { idempotent: true },
+        );
+        await this.convex.mutation(api.automations.setScheduleId, {
+          automationId: a.automationId,
+          scheduleId: sched.id,
+        });
+      }
+    }
+  }
+
+  async onConnect(connection: Connection, _ctx: ConnectionContext): Promise<void> {
+    connection.send(JSON.stringify({ event: "hello", data: { ok: true }, at: Date.now() }));
+  }
+
+  onRequest(request: Request): Response | Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === "/ws") {
-      return this.handleWebSocket(request);
-    }
-
     if (url.pathname === "/broadcast" && request.method === "POST") {
-      const raw: unknown = await request.json();
-      const parsed = broadcastEventSchema.safeParse(raw);
-      if (!parsed.success) {
-        return new Response("bad request", { status: 400 });
-      }
-      this.broadcast(parsed.data.event, parsed.data.data);
-      return Response.json({ ok: true });
+      return this.handleBroadcastRequest(request);
     }
 
     if (url.pathname === "/handle" && request.method === "POST") {
-      const raw: unknown = await request.json();
-      const parsed = handleRequestSchema.safeParse(raw);
-      if (!parsed.success) {
-        return new Response("bad request", { status: 400 });
-      }
-      const reply = await this.handleMessage(parsed.data.conversationId, parsed.data.content);
-      return Response.json({ reply });
+      return this.handleChatRequest(request);
+    }
+
+    if (url.pathname === "/consolidate" && request.method === "POST") {
+      return this.handleConsolidateRequest();
+    }
+
+    if (url.pathname === "/trigger/sweep" && request.method === "POST") {
+      return this.sweepStaleAgents().then(() => Response.json({ ok: true }));
+    }
+
+    if (url.pathname === "/trigger/clean" && request.method === "POST") {
+      return cleanMemories(this.convex).then((result) => Response.json(result));
+    }
+
+    if (url.pathname === "/trigger/automation" && request.method === "POST") {
+      return this.handleTriggerAutomation(request);
+    }
+
+    if (url.pathname === "/trigger/backfill" && request.method === "POST") {
+      return this.handleBackfillRequest();
     }
 
     return new Response("not found", { status: 404 });
   }
 
-  private handleWebSocket(request: Request): Response {
-    if (request.headers.get("Upgrade") !== "websocket") {
-      return new Response("expected websocket", { status: 426 });
+  private async handleBroadcastRequest(request: Request): Promise<Response> {
+    const raw: unknown = await request.json();
+    const parsed = broadcastEventSchema.safeParse(raw);
+    if (!parsed.success) {
+      return new Response("bad request", { status: 400 });
     }
-    const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1]);
-    pair[1].send(JSON.stringify({ event: "hello", data: { ok: true }, at: Date.now() }));
-
-    return new Response(null, { status: 101, webSocket: pair[0] });
+    this.broadcastEvent(parsed.data.event, parsed.data.data);
+    return Response.json({ ok: true });
   }
 
-  webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer): void {}
-
-  webSocketClose(ws: WebSocket): void {
-    ws.close();
+  private async handleChatRequest(request: Request): Promise<Response> {
+    const raw: unknown = await request.json();
+    const parsed = handleRequestSchema.safeParse(raw);
+    if (!parsed.success) {
+      return new Response("bad request", { status: 400 });
+    }
+    const reply = await this.handleMessage(parsed.data.conversationId, parsed.data.content);
+    return Response.json({ reply });
   }
 
-  async alarm(): Promise<void> {
-    try {
-      await this.sweepStaleAgents();
-    } catch (err) {
-      console.error("[heartbeat] sweep error", err);
-    }
-
-    const lastCleanup = (await this.ctx.storage.get<number>("lastCleanupAt")) ?? 0;
-    if (Date.now() - lastCleanup >= CLEANUP_INTERVAL_MS) {
-      try {
-        const result = await cleanMemories(this.convex);
-        console.log(
-          `[cleanup] scanned=${result.scanned} archived=${result.archived} pruned=${result.pruned}`,
-        );
-        await this.ctx.storage.put("lastCleanupAt", Date.now());
-      } catch (err) {
-        console.error("[cleanup] error", err);
-      }
-    }
-
-    await this.ctx.storage.setAlarm(Date.now() + 60_000);
+  private async handleConsolidateRequest(): Promise<Response> {
+    const result = await runConsolidation({
+      env: this.env,
+      convex: this.convex,
+      provider: this.provider,
+      broadcast: this.broadcastEvent.bind(this),
+      trigger: "manual",
+    });
+    return Response.json(result);
   }
 
-  private async sweepStaleAgents(): Promise<void> {
+  private async handleTriggerAutomation(request: Request): Promise<Response> {
+    const parsed = z.object({ automationId: z.string().min(1) }).safeParse(await request.json());
+    if (!parsed.success) {
+      return new Response("automationId required", { status: 400 });
+    }
+    await this.runAutomation({ automationId: parsed.data.automationId });
+    return Response.json({ ok: true });
+  }
+
+  private async handleBackfillRequest(): Promise<Response> {
+    await this.backfillCosts();
+    return Response.json({ ok: true });
+  }
+
+  async sweepStaleAgents(): Promise<void> {
     const runningInDb = await this.convex.query(api.agents.list, {
       status: "running",
       limit: 100,
@@ -205,9 +257,8 @@ export class BoopInteractionAgent extends DurableObject<Env> {
       const age = now - a.startedAt;
       if (age < STALE_AGENT_MS) continue;
 
-      const execId = this.env.EXEC_AGENT.idFromName(a.agentId);
-      const execStub = this.env.EXEC_AGENT.get(execId);
       try {
+        const execStub = await getServerByName(this.env.EXEC_AGENT, a.agentId);
         await execStub.fetch("http://agent/cancel", { method: "POST" });
       } catch {
         // DO may already be gone
@@ -218,19 +269,71 @@ export class BoopInteractionAgent extends DurableObject<Env> {
         status: "failed",
         error: `Marked failed after ${Math.round(age / 1000)}s (stale heartbeat).`,
       });
-      this.broadcast("agent_stale", { agentId: a.agentId });
+      this.broadcastEvent("agent_stale", { agentId: a.agentId });
     }
   }
 
-  broadcast<E extends EventName>(event: E, data: EventData<E>): void {
-    const payload = JSON.stringify({ event, data, at: Date.now() });
-    for (const ws of this.ctx.getWebSockets()) {
-      try {
-        ws.send(payload);
-      } catch {
-        // client disconnected
-      }
+  async cleanMemories(): Promise<void> {
+    try {
+      const result = await cleanMemories(this.convex);
+      console.log(
+        `[cleanup] scanned=${result.scanned} archived=${result.archived} pruned=${result.pruned}`,
+      );
+    } catch (err) {
+      console.error("[cleanup] error", err);
     }
+  }
+
+  async runConsolidation(): Promise<void> {
+    try {
+      await runConsolidation({
+        env: this.env,
+        convex: this.convex,
+        provider: this.provider,
+        broadcast: this.broadcastEvent.bind(this),
+        trigger: "scheduled",
+      });
+    } catch (err) {
+      console.error("[consolidation] scheduled run error", err);
+    }
+  }
+
+  async runAutomation(payload: { automationId: string }): Promise<void> {
+    try {
+      const nextScheduleId = await runAutomationTask({
+        automationId: payload.automationId,
+        env: this.env,
+        convex: this.convex,
+        broadcast: this.broadcastEvent.bind(this),
+        schedule: (automationId, runAt) =>
+          this.schedule(runAt, "runAutomation", { automationId }).then((s) => s.id),
+      });
+      if (nextScheduleId) {
+        await this.convex.mutation(api.automations.setScheduleId, {
+          automationId: payload.automationId,
+          scheduleId: nextScheduleId,
+        });
+      }
+    } catch (err) {
+      console.error("[automation] run error", err);
+    }
+  }
+
+  async backfillCosts(): Promise<void> {
+    try {
+      await backfillCosts({
+        env: this.env,
+        convex: this.convex,
+        storage: this.ctx.storage,
+      });
+    } catch (err) {
+      console.error("[cost-backfill] error", err);
+    }
+  }
+
+  broadcastEvent<E extends EventName>(event: E, data: EventData<E>): void {
+    const payload = JSON.stringify({ event, data, at: Date.now() });
+    this.broadcast(payload);
   }
 
   private async getRuntimeModel(): Promise<string> {
@@ -249,13 +352,21 @@ export class BoopInteractionAgent extends DurableObject<Env> {
       env: this.env,
       conversationId,
       turnId,
-      broadcast: this.broadcast.bind(this),
+      broadcast: this.broadcastEvent.bind(this) as <E extends EventName>(
+        event: E,
+        data: EventData<E>,
+      ) => void,
     };
     return {
       ...createMemoryTools(deps),
       ...createAckTools(deps),
       ...createSpawnTools(deps),
-      ...createAutomationTools(deps),
+      ...createAutomationTools({
+        ...deps,
+        schedule: (automationId: string, runAt: Date) =>
+          this.schedule(runAt, "runAutomation", { automationId }).then((s) => s.id),
+        cancelSchedule: (scheduleId: string) => this.cancelSchedule(scheduleId).then(() => {}),
+      }),
       ...createDraftDecisionTools(deps),
       ...createSelfTools(deps),
     };
@@ -286,7 +397,7 @@ export class BoopInteractionAgent extends DurableObject<Env> {
       turnId,
     });
 
-    this.broadcast("user_message", { conversationId, content });
+    this.broadcastEvent("user_message", { conversationId, content });
 
     try {
       const tools = this.buildTools(conversationId, turnId);
@@ -327,7 +438,7 @@ export class BoopInteractionAgent extends DurableObject<Env> {
         turnId,
       });
 
-      this.broadcast("assistant_message", { conversationId, content: reply });
+      this.broadcastEvent("assistant_message", { conversationId, content: reply });
 
       extractAndStore({
         env: this.env,

@@ -14,7 +14,7 @@ async function fetchWithBrowserRendering(url: string, env: Env): Promise<string>
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${env.CF_BROWSER_TOKEN}`,
+        Authorization: `Bearer ${env.CF_API_TOKEN}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ url, gotoOptions: { waitUntil: "networkidle2" } }),
@@ -97,10 +97,9 @@ export function createWebTools(env: Env, logger?: ToolCallLogger) {
       execute: async ({ url, render }) => {
         await logger?.onToolCall("web_fetch", { url, render });
         try {
-          const result =
-            render && env.CF_BROWSER_TOKEN
-              ? await fetchWithBrowserRendering(url, env)
-              : await fetchWithHtmlParser(url);
+          const result = render
+            ? await fetchWithBrowserRendering(url, env)
+            : await fetchWithHtmlParser(url);
           await logger?.onToolResult("web_fetch", result);
           return result;
         } catch (err) {

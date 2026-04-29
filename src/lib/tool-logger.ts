@@ -6,7 +6,7 @@ interface ComposioAccountFields {
   tools?: ComposioAccountFields[];
 }
 
-export type ToolArgs = Record<string, unknown> & Partial<ComposioAccountFields>;
+type ToolArgs = Record<string, unknown> & Partial<ComposioAccountFields>;
 
 export interface ToolCallLogger {
   onToolCall(toolName: string, args: ToolArgs): Promise<void>;
@@ -19,15 +19,20 @@ const ACCOUNT_KEYS: ReadonlyArray<keyof Omit<ComposioAccountFields, "accounts" |
   "connected_account_id",
 ];
 
-export function extractAccounts(args: ToolArgs): string[] {
+function isToolArgs(input: unknown): input is ToolArgs {
+  return input !== null && typeof input === "object" && !Array.isArray(input);
+}
+
+export function extractAccounts(input: ToolArgs | unknown): string[] {
+  if (!isToolArgs(input)) return [];
   const accounts = new Set<string>();
   const collect = (v: string | undefined) => {
     if (v?.trim()) accounts.add(v.trim());
   };
-  for (const key of ACCOUNT_KEYS) collect(args[key]);
-  if (Array.isArray(args.accounts)) args.accounts.forEach(collect);
-  if (Array.isArray(args.tools)) {
-    for (const t of args.tools) {
+  for (const key of ACCOUNT_KEYS) collect(input[key]);
+  if (Array.isArray(input.accounts)) input.accounts.forEach(collect);
+  if (Array.isArray(input.tools)) {
+    for (const t of input.tools) {
       for (const key of ACCOUNT_KEYS) collect(t[key]);
     }
   }

@@ -26,6 +26,34 @@ export const broadcastEventSchema = z.discriminatedUnion("event", [
     data: z.object({ agentId: z.string(), status: z.string(), result: z.string() }),
   }),
   z.object({ event: z.literal("agent_stale"), data: z.object({ agentId: z.string() }) }),
+  z.object({
+    event: z.literal("consolidation_started"),
+    data: z.object({ runId: z.string(), trigger: z.string() }),
+  }),
+  z.object({
+    event: z.literal("consolidation_phase"),
+    data: z.object({ runId: z.string(), phase: z.string() }).passthrough(),
+  }),
+  z.object({
+    event: z.literal("consolidation_completed"),
+    data: z.object({ runId: z.string(), merged: z.number(), pruned: z.number() }),
+  }),
+  z.object({
+    event: z.literal("consolidation_failed"),
+    data: z.object({ runId: z.string(), error: z.string() }),
+  }),
+  z.object({
+    event: z.literal("automation_started"),
+    data: z.object({ automationId: z.string(), runId: z.string(), name: z.string() }),
+  }),
+  z.object({
+    event: z.literal("automation_completed"),
+    data: z.object({ automationId: z.string(), runId: z.string() }),
+  }),
+  z.object({
+    event: z.literal("automation_failed"),
+    data: z.object({ automationId: z.string(), runId: z.string(), error: z.string() }),
+  }),
 ]);
 
 type BroadcastEvent = z.infer<typeof broadcastEventSchema>;

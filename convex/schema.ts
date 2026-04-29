@@ -113,6 +113,7 @@ export default defineSchema({
   })
     .index("by_conversation", ["conversationId"])
     .index("by_agent", ["agentId"])
+    .index("by_turn", ["turnId"])
     .index("by_source", ["source"]),
 
   agentLogs: defineTable({
@@ -155,6 +156,7 @@ export default defineSchema({
     notifyConversationId: v.optional(v.string()),
     lastRunAt: v.optional(v.number()),
     nextRunAt: v.optional(v.number()),
+    scheduleId: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_automation_id", ["automationId"])

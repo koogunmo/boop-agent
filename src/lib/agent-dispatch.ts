@@ -7,13 +7,16 @@ export async function dispatchToAgent<T extends Rpc.DurableObjectBranded>(
   conversationId: string,
   content: string,
 ): Promise<{ ok: true; reply: string } | { ok: false; status: number; error: string }> {
-  const agentId = namespace.idFromName(conversationId);
-  const stub = namespace.get(agentId);
+  const id = namespace.idFromName(conversationId);
+  const stub = namespace.get(id);
 
   const res = await stub.fetch(
     new Request("http://agent/handle", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-partykit-room": conversationId,
+      },
       body: JSON.stringify({ conversationId, content }),
     }),
   );

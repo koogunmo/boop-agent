@@ -1,6 +1,7 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import * as ai from "ai";
+import { type Connection, type ConnectionContext, getServerByName } from "partyserver";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { BoopInteractionAgent } from "@/agents/interaction";
@@ -29,22 +30,8 @@ function json(init: { method: string; body: Record<string, unknown> }): RequestI
   };
 }
 
-function waitForMessage(ws: WebSocket, timeoutMs = 2000): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("WebSocket message timeout")), timeoutMs);
-    ws.addEventListener(
-      "message",
-      (event) => {
-        clearTimeout(timer);
-        resolve(typeof event.data === "string" ? event.data : "");
-      },
-      { once: true },
-    );
-  });
-}
-
 function getStub(name: string) {
-  return env.BOOP_AGENT.get(env.BOOP_AGENT.idFromName(name));
+  return getServerByName(env.BOOP_AGENT, name);
 }
 
 describe("GET /health", () => {
@@ -114,38 +101,45 @@ describe("GET /ws", () => {
 
 describe("BoopInteractionAgent DO", () => {
   it("returns 404 for unknown paths", async () => {
-    const res = await getStub("t-404").fetch("http://agent/unknown");
+    const stub = await getStub("t-404");
+    const res = await stub.fetch("http://agent/unknown");
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("not found");
   });
 
-  it("upgrades to websocket and sends hello event", async () => {
-    const res = await getStub("t-ws").fetch("http://agent/ws", {
-      headers: { Upgrade: "websocket" },
-    });
-
-    expect(res.status).toBe(101);
-    expect(res.webSocket).toBeInstanceOf(WebSocket);
-    res.webSocket!.accept();
-
-    const raw = await waitForMessage(res.webSocket!);
-    const hello = z
-      .object({ event: z.string(), data: z.object({ ok: z.boolean() }), at: z.number() })
-      .parse(JSON.parse(raw));
-    expect(hello.event).toBe("hello");
-    expect(hello.data.ok).toBe(true);
-    expect(hello.at).toBeGreaterThan(0);
-
-    res.webSocket!.close();
+  it("onConnect sends hello event", async () => {
+    const stub = await getStub("t-ws");
+    await runInDurableObject<BoopInteractionAgent, void>(
+      stub,
+      async (instance: BoopInteractionAgent) => {
+        const sent: string[] = [];
+        const mockConnection = { send: (msg: string) => sent.push(msg) } as unknown as Connection;
+        const mockCtx = { request: new Request("http://agent/ws") } as ConnectionContext;
+        await instance.onConnect(mockConnection, mockCtx);
+        const helloRaw = sent.find((m) => {
+          try {
+            return JSON.parse(m).event === "hello";
+          } catch {
+            return false;
+          }
+        });
+        expect(helloRaw).toBeDefined();
+        const hello = JSON.parse(helloRaw!) as { event: string; data: { ok: boolean }; at: number };
+        expect(hello.data.ok).toBe(true);
+        expect(hello.at).toBeGreaterThan(0);
+      },
+    );
   });
 
-  it("rejects websocket without upgrade header", async () => {
-    const res = await getStub("t-ws-noup").fetch("http://agent/ws");
-    expect(res.status).toBe(426);
+  it("returns 404 for non-upgrade request to /ws", async () => {
+    const stub = await getStub("t-ws-noup");
+    const res = await stub.fetch("http://agent/ws");
+    expect(res.status).toBe(404);
   });
 
   it("returns 400 when /handle body is missing fields", async () => {
-    const res = await getStub("t-bad").fetch("http://agent/handle", {
+    const stub = await getStub("t-bad");
+    const res = await stub.fetch("http://agent/handle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -158,7 +152,7 @@ describe("BoopInteractionAgent DO", () => {
   }, async () => {
     const generateTextSpy = vi.spyOn(ai, "generateText");
     const convex = mockConvex([]);
-    const stub = getStub("t-handle");
+    const stub = await getStub("t-handle");
     await injectMocksIntoDO(stub, convex, "mocked reply");
 
     const res = await stub.fetch("http://agent/handle", {
@@ -207,7 +201,7 @@ describe("BoopInteractionAgent DO", () => {
       { role: "assistant", content: "first reply" },
       { role: "system", content: "should be filtered" },
     ]);
-    const stub = getStub("t-history");
+    const stub = await getStub("t-history");
     await injectMocksIntoDO(stub, convex, "second reply");
 
     await stub.fetch("http://agent/handle", {
@@ -224,7 +218,7 @@ describe("BoopInteractionAgent DO", () => {
 
   it("uses MODEL_DISPATCHER from env", async () => {
     const convex = mockConvex([]);
-    const stub = getStub("t-model");
+    const stub = await getStub("t-model");
     // The mock provider ignores the model ID, but the code path still reads it from env
     await injectMocksIntoDO(stub, convex, "ok");
 
@@ -240,7 +234,7 @@ describe("BoopInteractionAgent DO", () => {
 
   it("returns fallback message when LLM throws", async () => {
     const convex = mockConvex([]);
-    const stub = getStub("t-err");
+    const stub = await getStub("t-err");
     await injectMocksWithErrorIntoDO(stub, convex, new Error("API timeout"));
 
     const res = await stub.fetch("http://agent/handle", {
@@ -257,7 +251,7 @@ describe("BoopInteractionAgent DO", () => {
 
   it("returns '(no reply)' when LLM returns empty text", async () => {
     const convex = mockConvex([]);
-    const stub = getStub("t-empty");
+    const stub = await getStub("t-empty");
     await injectMocksIntoDO(stub, convex, "");
 
     const res = await stub.fetch("http://agent/handle", {
@@ -271,11 +265,11 @@ describe("BoopInteractionAgent DO", () => {
   });
 
   it("broadcast is callable without clients", async () => {
-    const stub = getStub("t-bc");
+    const stub = await getStub("t-bc");
     await runInDurableObject<BoopInteractionAgent, void>(
       stub,
       async (instance: BoopInteractionAgent) => {
-        expect(() => instance.broadcast("agent_stale", { agentId: "test_123" })).not.toThrow();
+        expect(() => instance.broadcastEvent("agent_stale", { agentId: "test_123" })).not.toThrow();
       },
     );
   });

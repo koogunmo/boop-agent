@@ -8,6 +8,8 @@ import { api } from "../../convex/_generated/api";
 interface AutomationToolDeps {
   convex: ConvexHttpClient;
   conversationId: string;
+  schedule?: (automationId: string, runAt: Date) => Promise<string>;
+  cancelSchedule?: (scheduleId: string) => Promise<void>;
 }
 
 function validateSchedule(schedule: string): { valid: boolean; error?: string } {
@@ -82,6 +84,14 @@ Use this for anything the user says "every [time]" or "remind me" about.`,
           ...(nextRunAt ? { nextRunAt } : {}),
         });
 
+        if (nextRunAt && deps.schedule) {
+          const scheduleId = await deps.schedule(automationId, new Date(nextRunAt));
+          await convex.mutation(api.automations.setScheduleId, {
+            automationId,
+            scheduleId,
+          });
+        }
+
         const nextStr = nextRunAt ? new Date(nextRunAt).toLocaleString() : "unknown";
         return `Created automation ${automationId} "${args.name}" — schedule: ${args.schedule}, next run: ${nextStr}.`;
       },
@@ -124,8 +134,29 @@ Use this for anything the user says "every [time]" or "remind me" about.`,
         enabled: z.boolean(),
       }),
       execute: async (args) => {
+        const all = await convex.query(api.automations.list, { enabledOnly: false });
+        const auto = all.find(
+          (a: { automationId: string }) => a.automationId === args.automationId,
+        );
+        if (!auto) return "Not found.";
+
         const id = await convex.mutation(api.automations.setEnabled, args);
-        return id ? `Set ${args.automationId} enabled=${String(args.enabled)}.` : "Not found.";
+        if (!id) return "Not found.";
+
+        if (!args.enabled && auto.scheduleId && deps.cancelSchedule) {
+          await deps.cancelSchedule(auto.scheduleId);
+          await convex.mutation(api.automations.setScheduleId, {
+            automationId: args.automationId,
+          });
+        } else if (args.enabled && auto.nextRunAt && deps.schedule) {
+          const scheduleId = await deps.schedule(args.automationId, new Date(auto.nextRunAt));
+          await convex.mutation(api.automations.setScheduleId, {
+            automationId: args.automationId,
+            scheduleId,
+          });
+        }
+
+        return `Set ${args.automationId} enabled=${String(args.enabled)}.`;
       },
     }),
 
@@ -135,6 +166,15 @@ Use this for anything the user says "every [time]" or "remind me" about.`,
         automationId: z.string(),
       }),
       execute: async (args) => {
+        const all = await convex.query(api.automations.list, { enabledOnly: false });
+        const auto = all.find(
+          (a: { automationId: string }) => a.automationId === args.automationId,
+        );
+
+        if (auto?.scheduleId && deps.cancelSchedule) {
+          await deps.cancelSchedule(auto.scheduleId);
+        }
+
         const id = await convex.mutation(api.automations.remove, args);
         return id ? `Deleted ${args.automationId}.` : "Not found.";
       },

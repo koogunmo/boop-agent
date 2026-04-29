@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
+import { getServerByName } from "partyserver";
 import { z } from "zod";
 import type { ToolCallLogger } from "@/lib/tool-logger";
 import { randomId } from "@/memory/types";
@@ -111,8 +112,7 @@ export function createDraftDecisionTools(deps: DraftToolDeps) {
           mcpServers: args.integrations,
         });
 
-        const execId = deps.env.EXEC_AGENT.idFromName(execAgentId);
-        const stub = deps.env.EXEC_AGENT.get(execId);
+        const stub = await getServerByName(deps.env.EXEC_AGENT, execAgentId);
         const execRes = await stub.fetch("http://agent/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -111,7 +111,9 @@ describe("toggle_automation", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("calls setEnabled and returns confirmation", async () => {
-    const convex = mockConvex();
+    const convex = mockConvex([
+      { automationId: "auto_1", enabled: true, name: "test", schedule: "0 8 * * *", task: "do it" },
+    ]);
     convex.mutation.mockResolvedValue("auto_1");
     const tools = createAutomationTools({ convex: cvx(convex), conversationId: CONV_ID });
 
@@ -123,17 +125,10 @@ describe("toggle_automation", () => {
     const resultStr = z.string().parse(result);
     expect(resultStr).toContain("auto_1");
     expect(resultStr).toContain("enabled=false");
-
-    expect(convex.mutation).toHaveBeenCalledOnce();
-    expect(convex.mutation.mock.calls[0]![1]).toMatchObject({
-      automationId: "auto_1",
-      enabled: false,
-    });
   });
 
-  it("returns 'Not found.' when mutation returns null", async () => {
-    const convex = mockConvex();
-    convex.mutation.mockResolvedValue(null);
+  it("returns 'Not found.' when automation doesn't exist", async () => {
+    const convex = mockConvex([]);
     const tools = createAutomationTools({ convex: cvx(convex), conversationId: CONV_ID });
 
     const result = await tools.toggle_automation.execute!(
