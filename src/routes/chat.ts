@@ -8,9 +8,7 @@ const chatBody = z.object({
   content: z.string().min(1),
 });
 
-const chat = new Hono<{ Bindings: Env }>();
-
-chat.post(
+const chat = new Hono<{ Bindings: Env }>().post(
   "/",
   zValidator("json", chatBody, (result, c) => {
     if (!result.success) {

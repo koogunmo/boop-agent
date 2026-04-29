@@ -26,11 +26,6 @@ export const FEATURED_SLUGS = new Set([
   "linkedin",
 ]);
 
-function getComposio(env: Env): Composio | null {
-  if (!env.COMPOSIO_API_KEY) return null;
-  return new Composio({ apiKey: env.COMPOSIO_API_KEY });
-}
-
 function boopUserId(env: Env): string {
   if (!env.COMPOSIO_USER_ID) throw new Error("COMPOSIO_USER_ID not set");
   return env.COMPOSIO_USER_ID;
@@ -213,15 +208,18 @@ export interface IComposioClient {
     opts?: { callbackUrl?: string; alias?: string },
   ): Promise<{ redirectUrl: string | null; connectionId: string }>;
   disconnectToolkit(connectionId: string): Promise<void>;
+  renameConnection(connectionId: string, alias: string): Promise<void>;
 }
 
 class ComposioClient implements IComposioClient {
   private readonly client: Composio;
   private readonly userId: string;
+  private readonly key: string;
 
-  constructor(client: Composio, userId: string) {
+  constructor(client: Composio, userId: string, apiKey: string) {
     this.client = client;
     this.userId = userId;
+    this.key = apiKey;
   }
 
   get raw(): Composio {
@@ -394,6 +392,21 @@ class ComposioClient implements IComposioClient {
   async disconnectToolkit(connectionId: string): Promise<void> {
     await this.client.connectedAccounts.delete(connectionId);
   }
+
+  async renameConnection(connectionId: string, alias: string): Promise<void> {
+    const res = await fetch(
+      `https://backend.composio.dev/api/v1/connectedAccounts/${encodeURIComponent(connectionId)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-api-key": this.key },
+        body: JSON.stringify({ alias }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Composio rename failed: ${res.status} ${text}`);
+    }
+  }
 }
 
 export class ComposioNeedsAuthConfigError extends Error {
@@ -411,7 +424,7 @@ export class ComposioNeedsAuthConfigError extends Error {
 }
 
 export function createComposioClient(env: Env): IComposioClient | null {
-  const composio = getComposio(env);
-  if (!composio) return null;
-  return new ComposioClient(composio, boopUserId(env));
+  if (!env.COMPOSIO_API_KEY) return null;
+  const composio = new Composio({ apiKey: env.COMPOSIO_API_KEY });
+  return new ComposioClient(composio, boopUserId(env), env.COMPOSIO_API_KEY);
 }

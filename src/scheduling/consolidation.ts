@@ -305,7 +305,7 @@ export async function runConsolidation(deps: ConsolidationDeps): Promise<{
     const challengesBlock = proposals
       .map((_p, i) => {
         const c = challengesByIndex.get(i);
-        if (!c || !c.objection) return `#${i}: adversary raised no objection`;
+        if (!c?.objection) return `#${i}: adversary raised no objection`;
         return `#${i}: [${c.severity}] ${c.objection}`;
       })
       .join("\n");

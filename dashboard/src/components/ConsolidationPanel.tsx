@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api.js";
-import { useSocket, type SocketEvent } from "../lib/useSocket.js";
+import { api } from "@convex-api";
+import { rpc } from "@/lib/api";
+import { useSocket, type SocketEvent } from "@/lib/useSocket";
+import type { EventData, EventName } from "@worker/lib/events";
 
 type Phase =
   | "loaded"
@@ -70,6 +72,24 @@ function timeAgo(ts?: number): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+const CONSOLIDATION_EVENTS: Set<EventName> = new Set([
+  "consolidation_started",
+  "consolidation_phase",
+  "consolidation_completed",
+  "consolidation_failed",
+]);
+
+function isConsolidationEvent(event: EventName): boolean {
+  return CONSOLIDATION_EVENTS.has(event);
+}
+
+function eventToPhase(event: EventName, data: EventData<EventName>): Phase {
+  if (event === "consolidation_started") return "loaded";
+  if (event === "consolidation_completed") return "completed";
+  if (event === "consolidation_failed") return "failed";
+  return (data.phase as Phase) ?? "loaded";
+}
+
 export function ConsolidationPanel({ isDark }: { isDark: boolean }) {
   const runs = useQuery(api.consolidation.listRuns, { limit: 50 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -77,35 +97,21 @@ export function ConsolidationPanel({ isDark }: { isDark: boolean }) {
   const [triggering, setTriggering] = useState(false);
 
   useSocket((evt: SocketEvent) => {
-    if (
-      evt.event === "consolidation_started" ||
-      evt.event === "consolidation_phase" ||
-      evt.event === "consolidation_completed" ||
-      evt.event === "consolidation_failed"
-    ) {
-      const data = evt.data as any;
-      const id = data.runId;
-      if (!id) return;
-      let phase: Phase;
-      if (evt.event === "consolidation_started") phase = "loaded";
-      else if (evt.event === "consolidation_completed") phase = "completed";
-      else if (evt.event === "consolidation_failed") phase = "failed";
-      else phase = data.phase as Phase;
-      setLivePhases((prev) => {
-        const next = { ...prev };
-        next[id] = [
-          ...(prev[id] ?? []),
-          { ...data, phase, runId: id, ts: evt.at },
-        ];
-        return next;
-      });
-    }
+    if (!isConsolidationEvent(evt.event)) return;
+    const data = evt.data;
+    const id = data.runId as string | undefined;
+    if (!id) return;
+    const phase = eventToPhase(evt.event, data);
+    setLivePhases((prev) => ({
+      ...prev,
+      [id]: [...(prev[id] ?? []), { ...data, phase, runId: id, ts: evt.at } as LivePhase],
+    }));
   });
 
   async function triggerManual() {
     setTriggering(true);
     try {
-      await fetch("/api/consolidate", { method: "POST" });
+      await rpc.api.consolidate.$post();
     } finally {
       setTimeout(() => setTriggering(false), 1500);
     }
@@ -283,21 +289,11 @@ function ConsolidationDetail({
 
   // Keep absorbing live phases that arrive while the detail is open
   useSocket((evt: SocketEvent) => {
-    const data = evt.data as any;
-    if (data?.runId !== runId) return;
-    if (
-      evt.event === "consolidation_phase" ||
-      evt.event === "consolidation_started" ||
-      evt.event === "consolidation_completed" ||
-      evt.event === "consolidation_failed"
-    ) {
-      let phase: Phase;
-      if (evt.event === "consolidation_started") phase = "loaded";
-      else if (evt.event === "consolidation_completed") phase = "completed";
-      else if (evt.event === "consolidation_failed") phase = "failed";
-      else phase = data.phase as Phase;
-      setAllPhases((prev) => [...prev, { ...data, phase, runId, ts: evt.at }]);
-    }
+    if (!isConsolidationEvent(evt.event)) return;
+    const data = evt.data;
+    if (data.runId !== runId) return;
+    const phase = eventToPhase(evt.event, data);
+    setAllPhases((prev) => [...prev, { ...data, phase, runId, ts: evt.at } as LivePhase]);
   });
 
   useEffect(() => {

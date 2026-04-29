@@ -2,6 +2,15 @@ import { env } from "cloudflare:workers";
 import * as ai from "ai";
 import { getServerByName } from "partyserver";
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("convex/browser", () => ({
+  ConvexHttpClient: class {
+    query = vi.fn().mockResolvedValue([]);
+    mutation = vi.fn().mockResolvedValue(null);
+    action = vi.fn().mockResolvedValue([]);
+  },
+}));
+
 import type { GatewayMetadata } from "@/lib/llm";
 
 function getStub(name: string) {

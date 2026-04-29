@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api.js";
-import MemoryGraphView from "./MemoryGraphView.js";
+import { api } from "@convex-api";
+import MemoryGraphView from "@/components/MemoryGraphView";
 
 type Tier = "all" | "short" | "long" | "permanent";
 type Segment = "all" | "identity" | "preference" | "relationship" | "project" | "knowledge" | "context";

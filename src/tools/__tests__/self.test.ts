@@ -18,6 +18,7 @@ function mockClient(overrides: {
     listToolkitSlugsWithAuthConfig: vi.fn().mockResolvedValue(new Set()),
     authorizeToolkit: vi.fn(),
     disconnectToolkit: vi.fn(),
+    renameConnection: vi.fn(),
   } satisfies composioModule.IComposioClient;
 }
 

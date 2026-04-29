@@ -13,8 +13,6 @@ const webhookBody = z.object({
   message_handle: z.string().optional(),
 });
 
-const sendblue = new Hono<{ Bindings: Env }>();
-
 async function processInbound(
   env: Env,
   conversationId: string,
@@ -44,32 +42,36 @@ async function processInbound(
   }
 }
 
-sendblue.post("/webhook", zValidator("json", webhookBody), async (c) => {
-  const body = c.req.valid("json");
+const sendblue = new Hono<{ Bindings: Env }>().post(
+  "/webhook",
+  zValidator("json", webhookBody),
+  async (c) => {
+    const body = c.req.valid("json");
 
-  if (body.is_outbound || !body.content || !body.from_number) {
-    return c.json({ ok: true, skipped: true });
-  }
-
-  const convex = new ConvexHttpClient(c.env.CONVEX_URL);
-
-  if (body.message_handle) {
-    const { claimed } = await convex.mutation(api.sendblueDedup.claim, {
-      handle: body.message_handle,
-    });
-    if (!claimed) {
-      return c.json({ ok: true, deduped: true });
+    if (body.is_outbound || !body.content || !body.from_number) {
+      return c.json({ ok: true, skipped: true });
     }
-  }
 
-  const conversationId = `sms:${body.from_number}`;
-  console.log(
-    `[sendblue] ← ${body.from_number}: ${JSON.stringify(body.content.length > 100 ? `${body.content.slice(0, 100)}…` : body.content)}`,
-  );
+    const convex = new ConvexHttpClient(c.env.CONVEX_URL);
 
-  c.executionCtx.waitUntil(processInbound(c.env, conversationId, body.content, body.from_number));
+    if (body.message_handle) {
+      const { claimed } = await convex.mutation(api.sendblueDedup.claim, {
+        handle: body.message_handle,
+      });
+      if (!claimed) {
+        return c.json({ ok: true, deduped: true });
+      }
+    }
 
-  return c.json({ ok: true });
-});
+    const conversationId = `sms:${body.from_number}`;
+    console.log(
+      `[sendblue] ← ${body.from_number}: ${JSON.stringify(body.content.length > 100 ? `${body.content.slice(0, 100)}…` : body.content)}`,
+    );
+
+    c.executionCtx.waitUntil(processInbound(c.env, conversationId, body.content, body.from_number));
+
+    return c.json({ ok: true });
+  },
+);
 
 export { sendblue };

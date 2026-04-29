@@ -10,5 +10,7 @@ declare namespace Cloudflare {
     COMPOSIO_API_KEY?: string;
     SERPER_API_KEY: string;
     CONVEX_URL: string;
+    // Shared secret for Convex → Worker callbacks. Must also be set in Convex env.
+    CONVEX_WEBHOOK_SECRET: string;
   }
 }

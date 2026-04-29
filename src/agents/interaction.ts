@@ -334,6 +334,18 @@ export class BoopInteractionAgent extends Agent<Env> {
   broadcastEvent<E extends EventName>(event: E, data: EventData<E>): void {
     const payload = JSON.stringify({ event, data, at: Date.now() });
     this.broadcast(payload);
+
+    if (this.name !== "default") {
+      getServerByName(this.env.BOOP_AGENT, "default")
+        .then((stub) =>
+          stub.fetch("http://agent/broadcast", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ event, data }),
+          }),
+        )
+        .catch((err) => console.error("[broadcast-forward] failed:", err));
+    }
   }
 
   private async getRuntimeModel(): Promise<string> {

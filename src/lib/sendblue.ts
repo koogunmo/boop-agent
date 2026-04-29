@@ -1,4 +1,4 @@
-import { parsePhoneNumber } from "libphonenumber-js";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 import removeMarkdown from "remove-markdown";
 import SendblueAPI from "sendblue";
 
@@ -13,16 +13,9 @@ function createClient(env: Env): SendblueAPI | null {
 }
 
 function normalizeE164(n: string | undefined): string | undefined {
-  if (!n) return undefined;
-  const trimmed = n.trim();
-  if (!trimmed) return undefined;
-  try {
-    const parsed = parsePhoneNumber(trimmed, "US");
-    if (parsed) return parsed.format("E.164");
-  } catch {
-    // not a valid phone number
-  }
-  return trimmed;
+  if (!n?.trim()) return undefined;
+  const parsed = parsePhoneNumberFromString(n.trim(), "US");
+  return parsed?.format("E.164");
 }
 
 export function chunk(text: string, size = MAX_CHUNK): string[] {

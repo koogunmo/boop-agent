@@ -101,11 +101,6 @@ function faviconUrl(domain: string) {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
 }
 
-export function getIntegrationBrand(raw?: string | null): ToolBrand | null {
-  const { server } = parseToolParts(raw);
-  return findBrand(server) ?? findBrand(raw);
-}
-
 export function prettyToolName(raw?: string | null): string {
   if (!raw) return "";
   const { server, action } = parseToolParts(raw);
@@ -248,10 +243,6 @@ export function IntegrationLogo({
       </span>
     </span>
   );
-}
-
-export function ClaudeLogo({ size = 12, className = "" }: { size?: number; className?: string }) {
-  return <img src="/claude-logo.png" width={size} height={size} alt="Claude" className={`inline-block ${className}`} />;
 }
 
 export function BrailleIndicator({ className = "" }: { className?: string }) {

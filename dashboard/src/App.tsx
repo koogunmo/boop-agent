@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
+import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   MachineRobotIcon,
@@ -10,15 +12,15 @@ import {
   DashboardSquare01Icon,
   ArrowShrink02Icon,
 } from "@hugeicons/core-free-icons";
-import { api } from "../../convex/_generated/api.js";
-import { useSocket } from "./lib/useSocket.js";
-import { DashboardPanel } from "./components/DashboardPanel.js";
-import { AgentsPanel } from "./components/AgentsPanel.js";
-import { AutomationsPanel } from "./components/AutomationsPanel.js";
-import { MemoryPanel } from "./components/MemoryPanel.js";
-import { EventsPanel } from "./components/EventsPanel.js";
-import { ConnectionsPanel } from "./components/ConnectionsPanel.js";
-import { ConsolidationPanel } from "./components/ConsolidationPanel.js";
+import { api } from "@convex-api";
+import { useSocket } from "@/lib/useSocket";
+import { DashboardPanel } from "@/components/DashboardPanel";
+import { AgentsPanel } from "@/components/AgentsPanel";
+import { AutomationsPanel } from "@/components/AutomationsPanel";
+import { MemoryPanel } from "@/components/MemoryPanel";
+import { EventsPanel } from "@/components/EventsPanel";
+import { ConnectionsPanel } from "@/components/ConnectionsPanel";
+import { ConsolidationPanel } from "@/components/ConsolidationPanel";
 
 type View =
   | "dashboard"
@@ -31,7 +33,7 @@ type View =
 
 type Theme = "dark" | "light";
 
-const NAV_ICONS: Record<View, any> = {
+const NAV_ICONS: Record<View, typeof DashboardSquare01Icon> = {
   dashboard: DashboardSquare01Icon,
   agents: MachineRobotIcon,
   automations: WorkflowCircle03Icon,
@@ -53,13 +55,123 @@ const NAV: { id: View; label: string }[] = [
 
 function getStoredTheme(): Theme {
   try {
-    return (localStorage.getItem("boop-debug-theme") as Theme) || "dark";
+    const stored = localStorage.getItem("boop-debug-theme");
+    return stored === "light" ? "light" : "dark";
   } catch {
     return "dark";
   }
 }
 
+function LoginScreen() {
+  const { signIn } = useAuthActions();
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"phone" | "code">("phone");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSendCode = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await signIn("sendblue-otp", { phone });
+      setStep("code");
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await signIn("sendblue-otp", { phone, code });
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="h-full flex items-center justify-center bg-slate-950">
+      <div className="w-80 space-y-6 text-center">
+        <img src="/lunagotchi.png" alt="Boop" className="w-16 h-16 rounded-2xl mx-auto" />
+        <h1 className="text-xl font-bold text-slate-200">Boop Dashboard</h1>
+        {step === "phone" ? (
+          <div className="space-y-3">
+            <input
+              type="tel"
+              placeholder="+1XXXXXXXXXX"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 text-sm"
+              onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
+            />
+            <button
+              onClick={handleSendCode}
+              disabled={loading || !phone}
+              className="w-full py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium disabled:opacity-50"
+            >
+              {loading ? "Sending…" : "Send Code via iMessage"}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-400">Code sent to {phone}</p>
+            <input
+              type="text"
+              placeholder="000000"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              maxLength={6}
+              className="w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 text-sm text-center tracking-[0.3em] font-mono text-lg"
+              onKeyDown={(e) => e.key === "Enter" && handleVerify()}
+              autoFocus
+            />
+            <button
+              onClick={handleVerify}
+              disabled={loading || code.length !== 6}
+              className="w-full py-2.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium disabled:opacity-50"
+            >
+              {loading ? "Verifying…" : "Verify"}
+            </button>
+            <button
+              onClick={() => { setStep("phone"); setCode(""); setError(""); }}
+              className="text-xs text-slate-500 hover:text-slate-300"
+            >
+              Use different number
+            </button>
+          </div>
+        )}
+        {error && <p className="text-xs text-rose-400">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
 export function App() {
+  return (
+    <>
+      <AuthLoading>
+        <div className="h-full flex items-center justify-center bg-slate-950">
+          <div className="text-slate-500 text-sm">Loading…</div>
+        </div>
+      </AuthLoading>
+      <Unauthenticated>
+        <LoginScreen />
+      </Unauthenticated>
+      <Authenticated>
+        <Dashboard />
+      </Authenticated>
+    </>
+  );
+}
+
+function Dashboard() {
+  const { signOut } = useAuthActions();
   const [view, setView] = useState<View>("dashboard");
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const { connected } = useSocket();
@@ -169,6 +281,16 @@ export function App() {
                 />
               </svg>
             )}
+          </button>
+          <button
+            onClick={() => signOut()}
+            className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
+              isDark
+                ? "text-slate-500 hover:text-rose-400 hover:bg-slate-800"
+                : "text-slate-400 hover:text-rose-500 hover:bg-slate-100"
+            }`}
+          >
+            Sign out
           </button>
         </div>
       </header>

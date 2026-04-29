@@ -30,7 +30,7 @@ export async function runAutomation(deps: RunAutomationDeps): Promise<string | n
 
   const all = await convex.query(api.automations.list, { enabledOnly: false });
   const a = all.find((auto: { automationId: string }) => auto.automationId === automationId);
-  if (!a || !a.enabled) return null;
+  if (!a?.enabled) return null;
 
   const runId = randomId("run");
   await convex.mutation(api.automations.createRun, {

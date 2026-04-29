@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api.js";
-import { IntegrationLogo, BrailleIndicator, prettyToolName } from "../lib/branding.js";
+import { api } from "@convex-api";
+import { IntegrationLogo, BrailleIndicator, prettyToolName } from "@/lib/branding";
 
 interface LogEntry {
   logType: string;

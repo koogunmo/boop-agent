@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api.js";
+import { api } from "@convex-api";
 
 function formatSchedule(schedule: string): string {
   return schedule;

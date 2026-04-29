@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback, type ReactNode } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api.js";
+import { api } from "@convex-api";
 
 type TimeRange = "all" | "7d" | "30d" | "90d";
 

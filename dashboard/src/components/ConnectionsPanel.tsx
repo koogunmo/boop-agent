@@ -1,4 +1,4 @@
-import { ComposioSection } from "./ComposioSection.js";
+import { ComposioSection } from "@/components/ComposioSection";
 
 export function ConnectionsPanel({ isDark }: { isDark: boolean }) {
   return (

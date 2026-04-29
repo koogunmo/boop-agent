@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { IntegrationLogo } from "../lib/branding.js";
+import { rpc } from "@/lib/api";
+import { IntegrationLogo } from "@/lib/branding";
 
 type AuthMode = "managed" | "byo";
 
@@ -260,9 +261,9 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
 
   const fetchToolkits = useCallback(async () => {
     try {
-      const r = await fetch("/api/composio/toolkits");
-      const json = (await r.json()) as ToolkitsResponse;
-      setData(json);
+      const r = await rpc.api.composio.toolkits.$get();
+      const json = await r.json();
+      setData(json as ToolkitsResponse);
     } catch {
       setData({ enabled: false, toolkits: [] });
     } finally {
@@ -279,28 +280,28 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
       setBusy(slug);
       setNeedsAuthConfig(null);
       try {
-        const r = await fetch(`/api/composio/toolkits/${slug}/authorize`, { method: "POST" });
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          if (err?.needsAuthConfig) {
-            setNeedsAuthConfig({
-              slug,
-              message: err.error,
-              setupUrl: err.setupUrl ?? COMPOSIO_DASHBOARD_URL,
-            });
-            setBusy(null);
-            return;
-          }
-          showToast(`Authorize failed: ${err?.error ?? r.statusText}`);
+        const r = await rpc.api.composio.toolkits[":slug"].authorize.$post({ param: { slug } });
+        const body = await r.json();
+        if (r.status === 409 && "needsAuthConfig" in body) {
+          setNeedsAuthConfig({
+            slug,
+            message: body.error,
+            setupUrl: body.setupUrl ?? COMPOSIO_DASHBOARD_URL,
+          });
           setBusy(null);
           return;
         }
-        const { redirectUrl } = await r.json();
-        if (!redirectUrl) {
+        if (!r.ok) {
+          showToast(`Authorize failed: ${"error" in body ? body.error : r.statusText}`);
+          setBusy(null);
+          return;
+        }
+        if (!("redirectUrl" in body) || !body.redirectUrl) {
           showToast("Composio did not return a redirect URL.");
           setBusy(null);
           return;
         }
+        const { redirectUrl } = body;
         const w = 600;
         const h = 700;
         const left = window.screenX + (window.outerWidth - w) / 2;
@@ -319,7 +320,7 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
               authPollRef.current = null;
             }
             try {
-              await fetch("/api/composio/refresh", { method: "POST" });
+              await rpc.api.composio.refresh.$post();
             } catch {
               /* ignore */
             }
@@ -339,14 +340,13 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
     async (slug: string, connectionId: string) => {
       setBusy(`${slug}:${connectionId}`);
       try {
-        const r = await fetch(`/api/composio/toolkits/${slug}/disconnect`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ connectionId }),
+        const r = await rpc.api.composio.toolkits[":slug"].disconnect.$post({
+          param: { slug },
+          json: { connectionId },
         });
         if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          showToast(`Disconnect failed: ${err?.error ?? r.statusText}`);
+          const err = await r.json();
+          showToast(`Disconnect failed: ${"error" in err ? err.error : r.statusText}`);
           return;
         }
         await fetchToolkits();
@@ -362,14 +362,13 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
   const rename = useCallback(
     async (connectionId: string, alias: string): Promise<boolean> => {
       try {
-        const r = await fetch(`/api/composio/connections/${connectionId}/rename`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ alias }),
+        const r = await rpc.api.composio.connections[":id"].rename.$post({
+          param: { id: connectionId },
+          json: { alias },
         });
         if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          showToast(`Rename failed: ${err?.error ?? r.statusText}`);
+          const err = await r.json();
+          showToast(`Rename failed: ${"error" in err ? err.error : r.statusText}`);
           return false;
         }
         await fetchToolkits();
@@ -390,10 +389,10 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
       if (toolsBySlug[slug] && toolsBySlug[slug] !== "error") return;
       setToolsBySlug((prev) => ({ ...prev, [slug]: "loading" }));
       try {
-        const r = await fetch(`/api/composio/toolkits/${slug}/tools`);
+        const r = await rpc.api.composio.toolkits[":slug"].tools.$get({ param: { slug } });
         if (!r.ok) throw new Error(r.statusText);
-        const json = (await r.json()) as { tools: ToolSummary[] };
-        setToolsBySlug((prev) => ({ ...prev, [slug]: json.tools }));
+        const json = await r.json();
+        setToolsBySlug((prev) => ({ ...prev, [slug]: "tools" in json ? json.tools : [] }));
       } catch {
         setToolsBySlug((prev) => ({ ...prev, [slug]: "error" }));
       }
@@ -413,7 +412,7 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
         title="Composio toolkits"
         count={activeCount}
         isDark={isDark}
-        hint={data?.enabled === false ? "Disabled — set COMPOSIO_API_KEY in .env.local" : undefined}
+        hint={data?.enabled === false ? "Disabled — set COMPOSIO_API_KEY in .dev.vars" : undefined}
       />
 
       {showIntro && data?.enabled !== false && <IntroCard isDark={isDark} onDismiss={dismissIntro} />}
@@ -456,10 +455,10 @@ export function ComposioSection({ isDark }: { isDark: boolean }) {
 
       {data?.enabled === false ? (
         <div className={`rounded-xl border px-4 py-6 text-sm ${cardBg} ${muted}`}>
-          Add <code>COMPOSIO_API_KEY</code> to <code>.env.local</code> and restart the server to
+          Add <code>COMPOSIO_API_KEY</code> to <code>.dev.vars</code> and restart the server to
           connect integrations like Gmail, Slack, GitHub, Linear, Notion, and more. Get a key at{" "}
           <a
-            href="https://app.composio.dev/developers?utm_source=chris&utm_medium=youtube&utm_campaign=collab"
+            href="https://app.composio.dev/developers"
             target="_blank"
             rel="noreferrer"
             className="text-sky-500 underline"

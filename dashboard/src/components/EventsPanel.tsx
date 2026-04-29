@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api.js";
+import { api } from "@convex-api";
 
 const EVENT_COLOR: Record<string, string> = {
   "memory.written": "bg-emerald-500/20 text-emerald-400",

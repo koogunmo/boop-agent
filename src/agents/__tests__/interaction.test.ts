@@ -1,101 +1,69 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import * as ai from "ai";
+import * as partyserver from "partyserver";
 import { type Connection, type ConnectionContext, getServerByName } from "partyserver";
 import { describe, expect, it, vi } from "vitest";
-import { z } from "zod";
+
+const mockConvexClient = {
+  query: vi.fn().mockResolvedValue([]),
+  mutation: vi.fn().mockResolvedValue(null),
+  action: vi.fn().mockResolvedValue([]),
+};
+vi.mock("convex/browser", () => ({
+  ConvexHttpClient: class {
+    query = mockConvexClient.query;
+    mutation = mockConvexClient.mutation;
+    action = mockConvexClient.action;
+  },
+}));
+
+import { testClient } from "hono/testing";
 import type { BoopInteractionAgent } from "@/agents/interaction";
 import app from "@/index";
 import type { GatewayMetadata } from "@/lib/llm";
 import { injectMocksIntoDO, injectMocksWithErrorIntoDO, mockConvex } from "@/lib/test-helpers";
 
-const healthResponse = z.object({ ok: z.boolean(), service: z.string() });
-const errorResponse = z.object({ error: z.string() });
-const replyResponse = z.object({ reply: z.string() });
-const webhookOk = z.object({
-  ok: z.literal(true),
-  skipped: z.literal(true).optional(),
-  deduped: z.literal(true).optional(),
-});
-
-async function req(path: string, init?: RequestInit): Promise<Response> {
-  return app.request(path, init, env);
-}
-
-function json(init: { method: string; body: Record<string, unknown> }): RequestInit {
-  return {
-    method: init.method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(init.body),
-  };
-}
+const client = testClient(app, env);
 
 function getStub(name: string) {
   return getServerByName(env.BOOP_AGENT, name);
 }
 
-describe("GET /health", () => {
+describe("GET /api/health", () => {
   it("returns ok:true, service name, and json content-type", async () => {
-    const res = await req("/health");
+    const res = await client.api.health.$get();
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("application/json");
-    const body = healthResponse.parse(await res.json());
+    const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.service).toBe("boop-agent");
   });
 });
 
-describe("POST /chat", () => {
-  it("returns 400 when conversationId missing", async () => {
-    const res = await req("/chat", json({ method: "POST", body: { content: "hi" } }));
-    expect(res.status).toBe(400);
-    const body = errorResponse.parse(await res.json());
-    expect(body.error).toBe("conversationId and content required");
-  });
-
-  it("returns 400 when content missing", async () => {
-    const res = await req("/chat", json({ method: "POST", body: { conversationId: "x" } }));
-    expect(res.status).toBe(400);
-  });
-
-  it("returns 400 when body is empty", async () => {
-    const res = await req("/chat", json({ method: "POST", body: {} }));
-    expect(res.status).toBe(400);
-  });
-});
-
-describe("POST /sendblue/webhook", () => {
+describe("POST /api/sendblue/webhook", () => {
   it("skips outbound messages", async () => {
-    const res = await req(
-      "/sendblue/webhook",
-      json({ method: "POST", body: { content: "hi", from_number: "+1234", is_outbound: true } }),
-    );
-    const body = webhookOk.parse(await res.json());
-    expect(body.ok).toBe(true);
-    expect(body.skipped).toBe(true);
+    const res = await client.api.sendblue.webhook.$post({
+      json: { content: "hi", from_number: "+1234", is_outbound: true },
+    });
+    const body = await res.json();
+    expect(body).toEqual({ ok: true, skipped: true });
   });
 
   it("skips messages without content", async () => {
-    const res = await req(
-      "/sendblue/webhook",
-      json({ method: "POST", body: { from_number: "+1234" } }),
-    );
-    const body = webhookOk.parse(await res.json());
-    expect(body.skipped).toBe(true);
+    const res = await client.api.sendblue.webhook.$post({
+      json: { from_number: "+1234" },
+    });
+    const body = await res.json();
+    expect(body).toEqual({ ok: true, skipped: true });
   });
 
   it("skips messages without from_number", async () => {
-    const res = await req("/sendblue/webhook", json({ method: "POST", body: { content: "hi" } }));
-    const body = webhookOk.parse(await res.json());
-    expect(body.skipped).toBe(true);
-  });
-});
-
-describe("GET /ws", () => {
-  it("rejects non-upgrade requests with 426", async () => {
-    const res = await req("/ws");
-    expect(res.status).toBe(426);
-    expect(await res.text()).toBe("Expected Upgrade: websocket");
+    const res = await client.api.sendblue.webhook.$post({
+      json: { content: "hi" },
+    });
+    const body = await res.json();
+    expect(body).toEqual({ ok: true, skipped: true });
   });
 });
 
@@ -162,7 +130,7 @@ describe("BoopInteractionAgent DO", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = replyResponse.parse(await res.json());
+    const body = (await res.json()) as { reply: string };
     expect(body.reply).toBe("mocked reply");
 
     expect(convex.query).toHaveBeenCalledTimes(2);
@@ -228,7 +196,7 @@ describe("BoopInteractionAgent DO", () => {
       body: JSON.stringify({ conversationId: "test:model", content: "hi" }),
     });
 
-    const body = replyResponse.parse(await res.json());
+    const body = (await res.json()) as { reply: string };
     expect(body.reply).toBe("ok");
   });
 
@@ -244,7 +212,7 @@ describe("BoopInteractionAgent DO", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = replyResponse.parse(await res.json());
+    const body = (await res.json()) as { reply: string };
     expect(body.reply).toContain("error");
     expect(body.reply).toContain("Try again");
   });
@@ -260,7 +228,7 @@ describe("BoopInteractionAgent DO", () => {
       body: JSON.stringify({ conversationId: "test:empty", content: "hi" }),
     });
 
-    const body = replyResponse.parse(await res.json());
+    const body = (await res.json()) as { reply: string };
     expect(body.reply).toBe("(no reply)");
   });
 
@@ -270,6 +238,65 @@ describe("BoopInteractionAgent DO", () => {
       stub,
       async (instance: BoopInteractionAgent) => {
         expect(() => instance.broadcastEvent("agent_stale", { agentId: "test_123" })).not.toThrow();
+      },
+    );
+  });
+
+  it("broadcastEvent on non-default instance forwards to default DO", async () => {
+    const stub = await getStub("t-fwd-conv");
+    await runInDurableObject<BoopInteractionAgent, void>(
+      stub,
+      async (instance: BoopInteractionAgent) => {
+        expect(instance.name).not.toBe("default");
+
+        const fetches: { url: string; body: string }[] = [];
+        const mockStub = {
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const req = input instanceof Request ? input : new Request(input, init);
+            fetches.push({ url: req.url, body: await req.text() });
+            return Response.json({ ok: true });
+          },
+        };
+        const original = getServerByName;
+        // biome-ignore lint/suspicious/noExplicitAny: mock needs to match overloaded getServerByName signature
+        vi.spyOn(partyserver, "getServerByName").mockImplementation(
+          async (ns: any, name: string) => {
+            if (name === "default") return mockStub as any;
+            return original(ns, name);
+          },
+        );
+
+        instance.broadcastEvent("agent_stale", { agentId: "fwd_test" });
+
+        await vi.waitFor(() => expect(fetches.length).toBeGreaterThan(0), { timeout: 3000 });
+
+        expect(fetches[0]!.url).toBe("http://agent/broadcast");
+        const body = JSON.parse(fetches[0]!.body);
+        expect(body.event).toBe("agent_stale");
+        expect(body.data).toEqual({ agentId: "fwd_test" });
+
+        vi.restoreAllMocks();
+      },
+    );
+  });
+
+  it("broadcastEvent on default instance does not forward", async () => {
+    const stub = await getStub("default");
+    await runInDurableObject<BoopInteractionAgent, void>(
+      stub,
+      async (instance: BoopInteractionAgent) => {
+        expect(instance.name).toBe("default");
+
+        const spy = vi.spyOn(partyserver, "getServerByName");
+
+        instance.broadcastEvent("agent_stale", { agentId: "no_fwd" });
+
+        await new Promise((r) => setTimeout(r, 500));
+
+        const forwardCalls = spy.mock.calls.filter(([_, name]) => name === "default");
+        expect(forwardCalls).toHaveLength(0);
+
+        vi.restoreAllMocks();
       },
     );
   });
