@@ -11,8 +11,7 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@convex-api": ["../convex/_generated/api"],
-      "@worker/*": ["../src/*"]
+      "@convex-api": ["../convex/_generated/api"]
     }
   },
   "include": ["src"]

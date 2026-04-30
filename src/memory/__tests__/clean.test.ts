@@ -1,6 +1,7 @@
 import type { ConvexHttpClient } from "convex/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { BroadcastFn } from "@/lib/events";
 import type { MockConvex } from "@/lib/test-helpers";
 import { mockConvex } from "@/lib/test-helpers";
 import { cleanMemories } from "@/memory/clean";
@@ -338,5 +339,21 @@ describe("cleanMemories", () => {
     const parsed = z.object({ scanned: z.number(), pruned: z.number() }).parse(result);
     // With very old createdAt and low importance, should be pruned
     expect(parsed.pruned).toBe(1);
+  });
+
+  it("broadcasts memory.cleaned event", async () => {
+    const convex = mockConvex([]);
+    const calls: Array<{ event: string; data: unknown }> = [];
+    const broadcast = ((event: string, data: unknown) =>
+      calls.push({ event, data })) as BroadcastFn;
+
+    await cleanMemories(cvx(convex), broadcast);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.event).toBe("memory.cleaned");
+    const data = calls[0]!.data as { scanned: number; archived: number; pruned: number };
+    expect(data.scanned).toBe(0);
+    expect(data.archived).toBe(0);
+    expect(data.pruned).toBe(0);
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { BroadcastFn } from "@/lib/events";
 import { cvx, mockConvex, testEnv } from "@/lib/test-helpers";
 import { SEGMENT_DEFAULTS } from "@/memory/types";
 import { createMemoryTools } from "@/tools/memory";
@@ -11,6 +12,15 @@ const toolOpts = {
   abortSignal: new AbortController().signal,
   toolCallId: "tc_test",
 };
+
+function mockBroadcast(): BroadcastFn & { calls: Array<{ event: string; data: unknown }> } {
+  const calls: Array<{ event: string; data: unknown }> = [];
+  const fn = ((event: string, data: unknown) => {
+    calls.push({ event, data });
+  }) as BroadcastFn & { calls: Array<{ event: string; data: unknown }> };
+  fn.calls = calls;
+  return fn;
+}
 
 describe("write_memory", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -98,6 +108,29 @@ describe("write_memory", () => {
 
     const upsertArgs = convex.mutation.mock.calls[0]![1];
     expect(upsertArgs.supersedes).toEqual(["mem_old1", "mem_old2"]);
+  });
+
+  it("broadcasts memory.written event", async () => {
+    const convex = mockConvex();
+    const broadcast = mockBroadcast();
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+      broadcast,
+    });
+
+    await tools.write_memory.execute!(
+      { content: "User likes coffee", segment: "preference", importance: 0.7 },
+      toolOpts,
+    );
+
+    expect(broadcast.calls).toHaveLength(1);
+    expect(broadcast.calls[0]!.event).toBe("memory.written");
+    const data = broadcast.calls[0]!.data as { memoryId: string; segment: string; tier: string };
+    expect(data.segment).toBe("preference");
+    expect(data.tier).toBe("long");
+    expect(data.memoryId).toMatch(/^mem_/);
   });
 
   it("allows explicit tier override", async () => {
@@ -203,6 +236,28 @@ describe("recall", () => {
     expect(data.query).toBe("anything");
     expect(data.hits).toBe(0);
     expect(data.mode).toBe("substring");
+  });
+
+  it("broadcasts memory.recalled event", async () => {
+    const memories = [
+      { memoryId: "mem_x", tier: "long", segment: "knowledge", importance: 0.6, content: "fact" },
+    ];
+    const convex = mockConvex(memories);
+    const broadcast = mockBroadcast();
+    const tools = createMemoryTools({
+      convex: cvx(convex),
+      env: testEnv(),
+      conversationId: CONV_ID,
+      broadcast,
+    });
+
+    await tools.recall.execute!({ query: "fact", limit: 5 }, toolOpts);
+
+    expect(broadcast.calls).toHaveLength(1);
+    expect(broadcast.calls[0]!.event).toBe("memory.recalled");
+    const data = broadcast.calls[0]!.data as { query: string; hits: number };
+    expect(data.query).toBe("fact");
+    expect(data.hits).toBe(1);
   });
 });
 

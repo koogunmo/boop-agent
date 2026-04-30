@@ -2,6 +2,7 @@ import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import { embed, embeddingsAvailable } from "@/lib/embeddings";
+import type { BroadcastFn } from "@/lib/events";
 import type { MemorySegment, MemoryTier } from "@/memory/types";
 import { DEFAULT_DECAY, makeMemoryId, SEGMENT_DEFAULTS } from "@/memory/types";
 import { api } from "../../convex/_generated/api";
@@ -21,10 +22,11 @@ interface MemoryToolDeps {
   convex: ConvexHttpClient;
   env: Env;
   conversationId: string;
+  broadcast?: BroadcastFn;
 }
 
 export function createMemoryTools(deps: MemoryToolDeps) {
-  const { convex, env, conversationId } = deps;
+  const { convex, env, conversationId, broadcast } = deps;
 
   return {
     write_memory: tool({
@@ -66,6 +68,7 @@ export function createMemoryTools(deps: MemoryToolDeps) {
             importance: args.importance,
           }),
         });
+        broadcast?.("memory.written", { memoryId, segment: args.segment, tier });
         return `Stored ${memoryId} (tier=${tier}, segment=${args.segment}).`;
       },
     }),
@@ -121,6 +124,7 @@ export function createMemoryTools(deps: MemoryToolDeps) {
             mode,
           }),
         });
+        broadcast?.("memory.recalled", { query: args.query, hits: results.length, mode });
 
         if (results.length === 0) {
           return "No memories matched.";

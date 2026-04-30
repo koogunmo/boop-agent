@@ -170,7 +170,10 @@ export class BoopInteractionAgent extends Agent<Env> {
   onRequest(request: Request): Response | Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === "/broadcast" && request.method === "POST") {
+    if (
+      (url.pathname === "/broadcast" || url.pathname === "/trigger/broadcast") &&
+      request.method === "POST"
+    ) {
       return this.handleBroadcastRequest(request);
     }
 
@@ -187,7 +190,9 @@ export class BoopInteractionAgent extends Agent<Env> {
     }
 
     if (url.pathname === "/trigger/clean" && request.method === "POST") {
-      return cleanMemories(this.convex).then((result) => Response.json(result));
+      return cleanMemories(this.convex, this.broadcastEvent.bind(this)).then((result) =>
+        Response.json(result),
+      );
     }
 
     if (url.pathname === "/trigger/automation" && request.method === "POST") {
@@ -275,7 +280,7 @@ export class BoopInteractionAgent extends Agent<Env> {
 
   async cleanMemories(): Promise<void> {
     try {
-      const result = await cleanMemories(this.convex);
+      const result = await cleanMemories(this.convex, this.broadcastEvent.bind(this));
       console.log(
         `[cleanup] scanned=${result.scanned} archived=${result.archived} pruned=${result.pruned}`,
       );
@@ -459,6 +464,7 @@ export class BoopInteractionAgent extends Agent<Env> {
         userMessage: content,
         assistantReply: reply,
         turnId,
+        broadcast: this.broadcastEvent.bind(this),
       }).catch((err) => console.error("[interaction] extraction error", err));
 
       return reply;

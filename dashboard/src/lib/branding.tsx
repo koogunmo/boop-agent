@@ -97,6 +97,11 @@ function parseToolParts(raw?: string | null): {
   return { server: null, action: raw };
 }
 
+function getIntegrationBrand(raw?: string | null): ToolBrand | null {
+  const { server } = parseToolParts(raw);
+  return findBrand(server) ?? findBrand(raw);
+}
+
 function faviconUrl(domain: string) {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
 }

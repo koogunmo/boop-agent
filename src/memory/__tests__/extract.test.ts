@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { BroadcastFn } from "@/lib/events";
 import type { GatewayMetadata } from "@/lib/llm";
 import type { MockConvex } from "@/lib/test-helpers";
 import { cvx, mockConvex, testEnv } from "@/lib/test-helpers";
@@ -218,6 +219,30 @@ describe("extractAndStore", () => {
     expect(upsertArgs.tier).toBe("long");
     const metadata = z.object({ corrects: z.string() }).parse(JSON.parse(upsertArgs.metadata));
     expect(metadata.corrects).toBe("Name was Alice");
+  });
+
+  it("broadcasts memory.extracted event", async () => {
+    const { generateText } = await import("ai");
+    const generateTextMock = vi.mocked(generateText);
+    generateTextMock.mockResolvedValue({
+      text: JSON.stringify({
+        facts: [{ content: "User is Alex", segment: "identity", importance: 0.85 }],
+      }),
+      usage: { inputTokens: 50, outputTokens: 20 },
+    } as never);
+
+    const convex = mockConvex();
+    const calls: Array<{ event: string; data: unknown }> = [];
+    const broadcast = ((event: string, data: unknown) =>
+      calls.push({ event, data })) as BroadcastFn;
+
+    await extractAndStore({ ...baseOpts(convex), broadcast });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.event).toBe("memory.extracted");
+    const data = calls[0]!.data as { turnId: string; count: number };
+    expect(data.turnId).toBe("turn_123");
+    expect(data.count).toBe(1);
   });
 
   it("records usage even when no facts are extracted", async () => {

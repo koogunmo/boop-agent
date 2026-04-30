@@ -1,4 +1,5 @@
 import type { ConvexHttpClient } from "convex/browser";
+import type { BroadcastFn } from "@/lib/events";
 import { ARCHIVE_THRESHOLD, effectiveScore, PRUNE_THRESHOLD } from "@/memory/types";
 import { api } from "../../convex/_generated/api";
 
@@ -8,7 +9,10 @@ interface CleanResult {
   pruned: number;
 }
 
-export async function cleanMemories(convex: ConvexHttpClient): Promise<CleanResult> {
+export async function cleanMemories(
+  convex: ConvexHttpClient,
+  broadcast?: BroadcastFn,
+): Promise<CleanResult> {
   const active = await convex.query(api.memoryRecords.list, {
     lifecycle: "active",
     limit: 500,
@@ -46,6 +50,7 @@ export async function cleanMemories(convex: ConvexHttpClient): Promise<CleanResu
     eventType: "memory.cleaned",
     data: JSON.stringify({ scanned: active.length, archived, pruned }),
   });
+  broadcast?.("memory.cleaned", { scanned: active.length, archived, pruned });
 
   return { scanned: active.length, archived, pruned };
 }

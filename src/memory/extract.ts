@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import { embed } from "@/lib/embeddings";
+import type { BroadcastFn } from "@/lib/events";
 import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
 import type { MemorySegment } from "@/memory/types";
 import { makeMemoryId, SEGMENT_DEFAULTS } from "@/memory/types";
@@ -64,6 +65,7 @@ interface ExtractOpts {
   userMessage: string;
   assistantReply: string;
   turnId: string;
+  broadcast?: BroadcastFn;
 }
 
 export async function extractAndStore(opts: ExtractOpts): Promise<void> {
@@ -147,6 +149,7 @@ export async function extractAndStore(opts: ExtractOpts): Promise<void> {
       conversationId,
       data: JSON.stringify({ turnId, count: parsed.data.facts.length }),
     });
+    opts.broadcast?.("memory.extracted", { turnId, count: parsed.data.facts.length });
   } catch (err) {
     console.error("[extract] error", err);
   }
