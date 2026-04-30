@@ -1,1 +1,1 @@
-bun run typecheck && bun run test && bun run lint-staged && bun run fallow:check
+bun run lint-staged && turbo run typecheck test lint fallow:check

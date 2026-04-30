@@ -1,12 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-  "entry": ["src/index.{ts,tsx,js,jsx}", "dashboard/src/main.tsx"],
+  "entry": ["apps/worker/src/index.ts", "apps/dashboard/src/main.tsx", "packages/shared/src/index.ts"],
   "ignorePatterns": [
     "server/**",
-    "debug/**",
     "scripts/**",
     "convex/**",
-    "worker-configuration.d.ts"
+    "apps/worker/worker-configuration.d.ts"
   ],
   "usedClassMembers": [
     {

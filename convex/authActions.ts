@@ -1,7 +1,7 @@
 import { hc } from "hono/client";
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import type { AppType } from "../src/index";
+import type { AppType } from "@boop/worker";
 
 export const sendOTP = internalAction({
   args: {

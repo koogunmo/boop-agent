@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "outDir": ".types",
+    "paths": {
+      "@/*": ["src/*"],
+      "@boop/worker": ["src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "worker-configuration.d.ts"],
+  "exclude": [".types", "dist", "src/**/__tests__", "node_modules"]
+}

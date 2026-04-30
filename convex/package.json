@@ -1,0 +1,20 @@
+{
+  "name": "@boop/convex",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./_generated/api.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "cd .. && convex dev"
+  },
+  "dependencies": {
+    "@auth/core": "0.37.0",
+    "@convex-dev/auth": "^0.0.91",
+    "convex": "catalog:",
+    "hono": "catalog:",
+    "libphonenumber-js": "^1.12.42"
+  }
+}

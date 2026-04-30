@@ -41,7 +41,7 @@
   },
   "overrides": [
     {
-      "includes": ["src/**/__tests__/*.test.ts"],
+      "includes": ["apps/worker/src/**/__tests__/*.test.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -52,7 +52,7 @@
     }
   ],
   "files": {
-    "includes": ["src/**", "scripts/**"],
+    "includes": ["packages/*/src/**", "apps/*/src/**", "scripts/**"],
     "experimentalScannerIgnores": ["node_modules", "dist", "convex/_generated", "worker-configuration.d.ts"]
   }
 }

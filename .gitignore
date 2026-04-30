@@ -15,8 +15,9 @@ data/
 *.sqlite
 *.sqlite-journal
 .vite/
-debug/dist/
 .cache/
-.tsbuildinfo
+*.tsbuildinfo
+.turbo/
+.types/
 .wrangler/
 .fallow/
