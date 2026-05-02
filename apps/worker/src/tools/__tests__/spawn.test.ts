@@ -56,4 +56,71 @@ describe("spawn_agent", () => {
     expect(mockExecAgent.idFromName).toHaveBeenCalledOnce();
     expect(mockStubFetch).toHaveBeenCalledOnce();
   });
+
+  it("integrations parameter accepts only available integrations when provided", () => {
+    const tools = createSpawnTools({
+      convex: cvx(mockConvex()),
+      env: testEnv(),
+      conversationId: CONV_ID,
+      broadcast: vi.fn(),
+      availableIntegrations: ["gmail", "slack", "github"],
+    });
+
+    const schema = tools.spawn_agent.inputSchema as unknown as {
+      parse: (v: unknown) => {
+        task: string;
+        integrations: string[];
+        name?: string;
+        toolHint?: string;
+      };
+    };
+    const valid = schema.parse({ task: "test", integrations: ["gmail", "slack"] });
+    expect(valid.integrations).toEqual(["gmail", "slack"]);
+
+    expect(() => schema.parse({ task: "test", integrations: ["brave_search"] })).toThrow();
+    expect(() => schema.parse({ task: "test", integrations: ["notion"] })).toThrow();
+  });
+
+  it("integrations defaults to empty array when omitted", () => {
+    const tools = createSpawnTools({
+      convex: cvx(mockConvex()),
+      env: testEnv(),
+      conversationId: CONV_ID,
+      broadcast: vi.fn(),
+      availableIntegrations: ["gmail"],
+    });
+
+    const schema = tools.spawn_agent.inputSchema as unknown as {
+      parse: (v: unknown) => {
+        task: string;
+        integrations: string[];
+        name?: string;
+        toolHint?: string;
+      };
+    };
+    const parsed = schema.parse({ task: "test" });
+    expect(parsed.integrations).toEqual([]);
+  });
+
+  it("rejects non-empty integrations when none are available", () => {
+    const tools = createSpawnTools({
+      convex: cvx(mockConvex()),
+      env: testEnv(),
+      conversationId: CONV_ID,
+      broadcast: vi.fn(),
+      availableIntegrations: [],
+    });
+
+    const schema = tools.spawn_agent.inputSchema as unknown as {
+      parse: (v: unknown) => {
+        task: string;
+        integrations: string[];
+        name?: string;
+        toolHint?: string;
+      };
+    };
+    expect(() => schema.parse({ task: "test", integrations: ["gmail"] })).toThrow();
+    const parsed = schema.parse({ task: "test", integrations: [] });
+    expect(parsed.integrations).toEqual([]);
+  });
 });

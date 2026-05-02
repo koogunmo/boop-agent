@@ -23,6 +23,12 @@ function isToolArgs(input: unknown): input is ToolArgs {
   return input !== null && typeof input === "object" && !Array.isArray(input);
 }
 
+export function serializeToolResult(result: unknown, maxLength = 2000): string {
+  if (typeof result === "string") return result.slice(0, maxLength);
+  const str = JSON.stringify(result, null, 2) ?? String(result);
+  return str.slice(0, maxLength);
+}
+
 export function extractAccounts(input: ToolArgs | unknown): string[] {
   if (!isToolArgs(input)) return [];
   const accounts = new Set<string>();

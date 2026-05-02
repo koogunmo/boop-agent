@@ -9,7 +9,7 @@ import { z } from "zod";
 import { createComposioClient } from "@/lib/composio";
 import { buildComposioTools } from "@/lib/composio-tools";
 import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
-import { extractAccounts, type ToolCallLogger } from "@/lib/tool-logger";
+import { extractAccounts, serializeToolResult, type ToolCallLogger } from "@/lib/tool-logger";
 import { createWebTools } from "@/lib/web-tools";
 import { createDraftStagingTools } from "@/tools/drafts";
 
@@ -23,7 +23,8 @@ Your job:
 Research discipline:
 - Prefer web_search for fresh/factual questions. web_fetch when you need the content of a known URL.
 - Cite real URLs only — NEVER invent sources. If a page failed to load, say so.
-- Cross-check when it matters: one search is rarely enough for a claim.
+- If web_search returns a direct answer (answerBox, knowledgeGraph, featured snippet), trust it and stop. Don't fetch extra pages to verify Google's own answer.
+- Cross-check only when the answer comes from regular search results and the claim is ambiguous or contested.
 
 MANDATORY: for any task that used web_search or web_fetch, end your response with
 a "Sources:" section listing the ACTUAL URLs you fetched or found. Example:
@@ -160,7 +161,7 @@ export class BoopExecutionAgent extends Agent<Env> {
           agentId,
           logType: "tool_result",
           toolName,
-          content: String(result).slice(0, 2000),
+          content: serializeToolResult(result),
         });
       },
     };
@@ -186,7 +187,6 @@ export class BoopExecutionAgent extends Agent<Env> {
       const executor = new DynamicWorkerExecutor({
         loader: this.env.LOADER,
         timeout: 60000,
-        globalOutbound: null,
       });
 
       const codemode = createCodeTool({
@@ -224,7 +224,7 @@ export class BoopExecutionAgent extends Agent<Env> {
             await convex.mutation(api.agents.addLog, {
               agentId,
               logType: "tool_result",
-              content: String(chunk.output).slice(0, 2000),
+              content: serializeToolResult(chunk.output),
             });
           }
         },

@@ -11,7 +11,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter='!@boop/worker' & wrangler dev -c apps/worker/wrangler.toml",
     "deploy:convex": "convex deploy",
     "setup": "bun scripts/setup.ts",
     "fallow": "fallow",

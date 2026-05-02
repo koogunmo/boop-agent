@@ -11,20 +11,34 @@ interface SpawnToolDeps {
   env: Env;
   conversationId: string;
   broadcast: BroadcastFn;
+  availableIntegrations?: string[] | undefined;
 }
 
 export function createSpawnTools(deps: SpawnToolDeps) {
   const { convex, env, conversationId, broadcast } = deps;
 
+  const integrationValues = deps.availableIntegrations;
+  const integrationSchema =
+    integrationValues !== undefined && integrationValues.length > 0
+      ? z.array(z.enum(integrationValues as [string, ...string[]]))
+      : integrationValues !== undefined
+        ? z.tuple([])
+        : z.array(z.string());
+
   return {
     spawn_agent: tool({
       description:
-        "Spawn a focused sub-agent to do real work using external tools. Returns the agent's final answer. Use for anything requiring lookups, drafting, or actions in the user's integrations.",
+        "Spawn a focused sub-agent to do real work. The agent always has web_search and web_fetch built in. Pass integrations only for connected services (gmail, slack, etc). Pass [] for web-only tasks.",
       inputSchema: z.object({
         task: z
           .string()
           .describe("Crisp task description — what to find/draft/do, not the raw user message."),
-        integrations: z.array(z.string()).describe("Which integrations to give the agent."),
+        integrations: integrationSchema
+          .optional()
+          .default([])
+          .describe(
+            "Connected integrations to load. Only needed for tasks using gmail, slack, etc.",
+          ),
         name: z.string().optional().describe("Short label for the agent."),
         toolHint: z
           .string()

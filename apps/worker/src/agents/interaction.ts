@@ -6,6 +6,7 @@ import { generateText, type ModelMessage, stepCountIs } from "ai";
 import { ConvexHttpClient } from "convex/browser";
 import { type Connection, type ConnectionContext, getServerByName } from "partyserver";
 import { z } from "zod";
+import { createComposioClient } from "@/lib/composio";
 import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
 import { cleanMemories } from "@/memory/clean";
 import { extractAndStore } from "@/memory/extract";
@@ -363,7 +364,18 @@ export class BoopInteractionAgent extends Agent<Env> {
     return this.env.MODEL_DISPATCHER;
   }
 
-  private buildTools(conversationId: string, turnId: string) {
+  private async buildTools(conversationId: string, turnId: string) {
+    const composioClient = createComposioClient(this.env);
+    let connectedSlugs: string[] | undefined;
+    if (composioClient) {
+      const connected = await composioClient.listConnectedToolkits();
+      connectedSlugs = [
+        ...new Set(connected.filter((c) => c.status === "ACTIVE").map((c) => c.slug)),
+      ];
+    } else {
+      connectedSlugs = [];
+    }
+
     const deps = {
       convex: this.convex,
       env: this.env,
@@ -377,7 +389,7 @@ export class BoopInteractionAgent extends Agent<Env> {
     return {
       ...createMemoryTools(deps),
       ...createAckTools(deps),
-      ...createSpawnTools(deps),
+      ...createSpawnTools({ ...deps, availableIntegrations: connectedSlugs }),
       ...createAutomationTools({
         ...deps,
         schedule: (automationId: string, runAt: Date) =>
@@ -417,7 +429,7 @@ export class BoopInteractionAgent extends Agent<Env> {
     this.broadcastEvent("user_message", { conversationId, content });
 
     try {
-      const tools = this.buildTools(conversationId, turnId);
+      const tools = await this.buildTools(conversationId, turnId);
       const turnStart = Date.now();
 
       const modelId = await this.getRuntimeModel();
