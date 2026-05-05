@@ -1,39 +1,7 @@
 import { api } from "@boop/convex";
-import type { EventData, EventName } from "@boop/shared/events";
 import { useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
 import { useEffect, useState } from "react";
-import { rpc } from "@/lib/api";
 import { type SocketEvent, useSocket } from "@/lib/useSocket";
-
-type ConsolidationRun = NonNullable<FunctionReturnType<typeof api.consolidation.listRuns>>[number];
-
-interface ConsolidationProposal {
-  type: string;
-  keep?: string;
-  absorb?: string[];
-  rewriteContent?: string;
-  newer?: string;
-  older?: string[];
-  memoryId?: string;
-  reason?: string;
-}
-
-interface ConsolidationDecision {
-  proposalIndex: number;
-  approve: boolean;
-  rationale?: string;
-}
-
-interface ConsolidationApplied {
-  proposalIndex: number;
-}
-
-interface ConsolidationDetails {
-  proposals: ConsolidationProposal[];
-  decisions?: ConsolidationDecision[];
-  applied?: ConsolidationApplied[];
-}
 
 type Phase =
   | "loaded"
@@ -58,14 +26,42 @@ interface LivePhase {
   ts: number;
 }
 
-const DEFAULT_PHASE = {
-  icon: "🚀",
-  dot: "bg-sky-400",
-  color: "text-sky-400",
-  label: "STARTED",
-} as const;
+interface Proposal {
+  type: string;
+  keep?: string;
+  absorb?: string[];
+  rewriteContent?: string;
+  newer?: string;
+  older?: string[];
+  memoryId?: string;
+  reason?: string;
+}
 
-const PHASE_CONFIG: Record<string, { icon: string; dot: string; color: string; label: string }> = {
+interface Decision {
+  proposalIndex: number;
+  approve: boolean;
+  rationale?: string;
+}
+
+interface Applied {
+  proposalIndex: number;
+}
+
+interface Details {
+  proposals: Proposal[];
+  decisions?: Decision[];
+  applied?: Applied[];
+  memorySnapshots?: Record<string, { content: string; segment: string; tier: string }>;
+}
+
+interface PhaseStyle {
+  icon: string;
+  dot: string;
+  color: string;
+  label: string;
+}
+
+const PHASE_CONFIG: Record<Phase | "started", PhaseStyle> = {
   started: { icon: "🚀", dot: "bg-sky-400", color: "text-sky-400", label: "STARTED" },
   loaded: { icon: "📥", dot: "bg-sky-400", color: "text-sky-400", label: "LOADED MEMORIES" },
   proposing: {
@@ -74,12 +70,7 @@ const PHASE_CONFIG: Record<string, { icon: string; dot: string; color: string; l
     color: "text-emerald-400",
     label: "PROPOSER THINKING",
   },
-  proposed: {
-    icon: "📋",
-    dot: "bg-emerald-400",
-    color: "text-emerald-400",
-    label: "PROPOSALS",
-  },
+  proposed: { icon: "📋", dot: "bg-emerald-400", color: "text-emerald-400", label: "PROPOSALS" },
   judging: {
     icon: "⚖️",
     dot: "bg-amber-400 live-dot",
@@ -88,12 +79,7 @@ const PHASE_CONFIG: Record<string, { icon: string; dot: string; color: string; l
   },
   judged: { icon: "⚖️", dot: "bg-amber-400", color: "text-amber-400", label: "VERDICT" },
   applying: { icon: "🔧", dot: "bg-cyan-400", color: "text-cyan-400", label: "APPLYING" },
-  completed: {
-    icon: "🏁",
-    dot: "bg-emerald-400",
-    color: "text-emerald-400",
-    label: "COMPLETED",
-  },
+  completed: { icon: "🏁", dot: "bg-emerald-400", color: "text-emerald-400", label: "COMPLETED" },
   failed: { icon: "❌", dot: "bg-rose-400", color: "text-rose-400", label: "FAILED" },
 };
 
@@ -106,23 +92,31 @@ function timeAgo(ts?: number): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
-const CONSOLIDATION_EVENTS: Set<EventName> = new Set([
-  "consolidation_started",
-  "consolidation_phase",
-  "consolidation_completed",
-  "consolidation_failed",
-]);
-
-function isConsolidationEvent(event: EventName): boolean {
-  return CONSOLIDATION_EVENTS.has(event);
-}
-
-function eventToPhase(event: EventName, data: EventData<EventName>): Phase {
-  if (event === "consolidation_started") return "loaded";
-  if (event === "consolidation_completed") return "completed";
-  if (event === "consolidation_failed") return "failed";
-  const d = data as { phase?: string };
-  return (d.phase as Phase) ?? "loaded";
+function livePhaseFromEvent(evt: SocketEvent): LivePhase | null {
+  if (
+    evt.event !== "consolidation_started" &&
+    evt.event !== "consolidation_phase" &&
+    evt.event !== "consolidation_completed" &&
+    evt.event !== "consolidation_failed"
+  )
+    return null;
+  const d = evt.data as Record<string, unknown>;
+  const runId = d.runId as string | undefined;
+  if (!runId) return null;
+  let phase: Phase;
+  if (evt.event === "consolidation_started") phase = "loaded";
+  else if (evt.event === "consolidation_completed") phase = "completed";
+  else if (evt.event === "consolidation_failed") phase = "failed";
+  else phase = (d.phase as Phase) ?? "loaded";
+  const lp: LivePhase = { runId, phase, ts: evt.at };
+  if (typeof d.memoriesCount === "number") lp.memoriesCount = d.memoriesCount;
+  if (typeof d.proposalsCount === "number") lp.proposalsCount = d.proposalsCount;
+  if (typeof d.approvedCount === "number") lp.approvedCount = d.approvedCount;
+  if (typeof d.rejectedCount === "number") lp.rejectedCount = d.rejectedCount;
+  if (typeof d.mergedCount === "number") lp.mergedCount = d.mergedCount;
+  if (typeof d.prunedCount === "number") lp.prunedCount = d.prunedCount;
+  if (typeof d.error === "string") lp.error = d.error;
+  return lp;
 }
 
 export function ConsolidationPanel({ isDark }: { isDark: boolean }) {
@@ -132,24 +126,18 @@ export function ConsolidationPanel({ isDark }: { isDark: boolean }) {
   const [triggering, setTriggering] = useState(false);
 
   useSocket((evt: SocketEvent) => {
-    if (!isConsolidationEvent(evt.event)) return;
-    const data = evt.data as { runId?: string; phase?: string };
-    const id = data.runId;
-    if (!id) return;
-    const phase = eventToPhase(evt.event, evt.data);
+    const lp = livePhaseFromEvent(evt);
+    if (!lp) return;
     setLivePhases((prev) => ({
       ...prev,
-      [id]: [...(prev[id] ?? []), { ...data, phase, runId: id, ts: evt.at } as LivePhase],
+      [lp.runId]: [...(prev[lp.runId] ?? []), lp],
     }));
   });
 
   async function triggerManual() {
     setTriggering(true);
-    try {
-      await rpc.api.consolidate.$post();
-    } finally {
-      setTimeout(() => setTriggering(false), 1500);
-    }
+    await fetch("/api/consolidate", { method: "POST" });
+    setTimeout(() => setTriggering(false), 1500);
   }
 
   const list = runs ?? [];
@@ -216,11 +204,11 @@ export function ConsolidationPanel({ isDark }: { isDark: boolean }) {
           list.map((run) => {
             const isActive = run.status === "running";
             const statusCfg =
-              (run.status === "completed"
+              run.status === "completed"
                 ? PHASE_CONFIG.completed
                 : run.status === "failed"
                   ? PHASE_CONFIG.failed
-                  : PHASE_CONFIG.started) ?? DEFAULT_PHASE;
+                  : PHASE_CONFIG.started;
             const durationMs =
               run.completedAt && run.startedAt
                 ? run.completedAt - run.startedAt
@@ -230,7 +218,7 @@ export function ConsolidationPanel({ isDark }: { isDark: boolean }) {
                 type="button"
                 key={run._id}
                 onClick={() => setSelectedId(run.runId)}
-                className={`border rounded-xl p-4 cursor-pointer transition-all duration-150 fade-in text-left w-full ${cardBg} ${hoverBg}`}
+                className={`border rounded-xl p-4 cursor-pointer transition-all duration-150 fade-in w-full text-left ${cardBg} ${hoverBg}`}
               >
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -244,9 +232,7 @@ export function ConsolidationPanel({ isDark }: { isDark: boolean }) {
                     />
                   </span>
                   <span
-                    className={`text-sm font-medium ${
-                      isDark ? "text-slate-200" : "text-slate-800"
-                    }`}
+                    className={`text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-800"}`}
                   >
                     {statusCfg.label}
                   </span>
@@ -255,7 +241,6 @@ export function ConsolidationPanel({ isDark }: { isDark: boolean }) {
                     {timeAgo(run.startedAt)} · {(durationMs / 1000).toFixed(1)}s
                   </span>
                 </div>
-
                 <div className="flex items-center gap-4 ml-5 text-[11px] mono">
                   <Metric
                     label="proposals"
@@ -307,18 +292,15 @@ function ConsolidationDetail({
   const run = runs?.find((r) => r.runId === runId);
   const [allPhases, setAllPhases] = useState<LivePhase[]>(phases);
 
-  // Keep absorbing live phases that arrive while the detail is open
   useSocket((evt: SocketEvent) => {
-    if (!isConsolidationEvent(evt.event)) return;
-    const data = evt.data as { runId?: string; phase?: string };
-    if (data.runId !== runId) return;
-    const phase = eventToPhase(evt.event, evt.data);
-    setAllPhases((prev) => [...prev, { ...data, phase, runId, ts: evt.at } as LivePhase]);
+    const lp = livePhaseFromEvent(evt);
+    if (!lp || lp.runId !== runId) return;
+    setAllPhases((prev) => [...prev, lp]);
   });
 
   useEffect(() => {
     setAllPhases(phases);
-  }, [phases]);
+  }, [runId, phases]);
 
   const muted = isDark ? "text-slate-500" : "text-slate-400";
 
@@ -342,11 +324,11 @@ function ConsolidationDetail({
   }
 
   const statusCfg =
-    (run.status === "completed"
+    run.status === "completed"
       ? PHASE_CONFIG.completed
       : run.status === "failed"
         ? PHASE_CONFIG.failed
-        : PHASE_CONFIG.started) ?? DEFAULT_PHASE;
+        : PHASE_CONFIG.started;
 
   return (
     <div className="flex flex-col h-full -m-5 fade-in">
@@ -407,23 +389,23 @@ function ConsolidationDetail({
       </div>
 
       <div className="flex-1 overflow-y-auto debug-scroll p-5 space-y-6">
-        {/* Pipeline timeline (live + historical) */}
         <section>
           <div className={`text-[10px] font-semibold uppercase tracking-wider mb-3 ${muted}`}>
             Pipeline Timeline
           </div>
           {allPhases.length === 0 ? (
             <div className={`text-sm ${muted}`}>
-              No live phase events captured. Scroll down for the stored proposals and decisions from
-              this run.
+              {run.status === "completed" || run.status === "failed"
+                ? "Phase events stream live; this run already finished. The full result is preserved below."
+                : "Waiting for phase events…"}
             </div>
           ) : (
             <div className="space-y-0">
               {allPhases.map((p, i) => {
-                const cfg = PHASE_CONFIG[p.phase] ?? DEFAULT_PHASE;
+                const cfg = PHASE_CONFIG[p.phase] ?? PHASE_CONFIG.started;
                 const isLast = i === allPhases.length - 1;
                 return (
-                  <div key={`${p.phase}-${p.ts}`} className="flex gap-3 slide-down">
+                  <div key={`${p.ts}-${i}`} className="flex gap-3 slide-down">
                     <div className="flex flex-col items-center shrink-0 w-5">
                       <div className="mt-1.5 text-[14px] leading-none">{cfg.icon}</div>
                       {!isLast && (
@@ -460,7 +442,6 @@ function ConsolidationDetail({
           )}
         </section>
 
-        {/* Stored reasoning — proposals + decisions + applied */}
         <ReasoningSection run={run} isDark={isDark} />
 
         {run.notes && (
@@ -478,13 +459,19 @@ function ConsolidationDetail({
   );
 }
 
-function ReasoningSection({ run, isDark }: { run: ConsolidationRun; isDark: boolean }) {
+function ReasoningSection({
+  run,
+  isDark,
+}: {
+  run: { status: string; details?: string; proposalsCount: number };
+  isDark: boolean;
+}) {
   const muted = isDark ? "text-slate-500" : "text-slate-400";
-  let details: ConsolidationDetails | null = null;
+  let details: Details | null = null;
   try {
-    details = run.details ? JSON.parse(run.details) : null;
+    details = run.details ? (JSON.parse(run.details) as Details) : null;
   } catch {
-    /* invalid JSON */
+    details = null;
   }
 
   if (!details?.proposals?.length) {
@@ -498,23 +485,17 @@ function ReasoningSection({ run, isDark }: { run: ConsolidationRun; isDark: bool
             ? "Proposals will appear here when the proposer finishes."
             : run.proposalsCount === 0
               ? "Proposer found nothing to change."
-              : "No stored reasoning for this run (this was likely a pre-upgrade run)."}
+              : "No stored reasoning for this run."}
         </div>
       </section>
     );
   }
 
-  const decisions: ConsolidationDecision[] = details.decisions ?? [];
-  const applied: ConsolidationApplied[] = details.applied ?? [];
-  const decisionByIdx = new Map<number, ConsolidationDecision>();
-  for (const d of decisions) decisionByIdx.set(d.proposalIndex, d);
-  const appliedByIdx = new Set<number>(applied.map((a) => a.proposalIndex));
-
-  const proposalsWithKeys = details.proposals.map((p, i) => ({
-    ...p,
-    _key: `${p.type}-${p.keep ?? p.newer ?? p.memoryId ?? ""}-${i}`,
-    _idx: i,
-  }));
+  const decisions = details.decisions ?? [];
+  const applied = details.applied ?? [];
+  const snapshots = details.memorySnapshots ?? {};
+  const decisionByIdx = new Map(decisions.map((d) => [d.proposalIndex, d]));
+  const appliedByIdx = new Set(applied.map((a) => a.proposalIndex));
 
   return (
     <section>
@@ -522,8 +503,7 @@ function ReasoningSection({ run, isDark }: { run: ConsolidationRun; isDark: bool
         Proposals & Decisions · {details.proposals.length} total
       </div>
       <div className="space-y-2">
-        {proposalsWithKeys.map((p) => {
-          const idx = p._idx;
+        {details.proposals.map((p, idx) => {
           const d = decisionByIdx.get(idx);
           const wasApplied = appliedByIdx.has(idx);
           const outcome = !d
@@ -556,7 +536,7 @@ function ReasoningSection({ run, isDark }: { run: ConsolidationRun; isDark: bool
 
           return (
             <div
-              key={p._key}
+              key={idx}
               className={`border rounded-lg p-3 ${
                 isDark ? "bg-slate-900/50 border-slate-800" : "bg-slate-50 border-slate-200"
               }`}
@@ -568,30 +548,31 @@ function ReasoningSection({ run, isDark }: { run: ConsolidationRun; isDark: bool
                   {outcome.label}
                 </span>
                 <span
-                  className={`text-[10px] mono uppercase ${
-                    isDark ? "text-slate-400" : "text-slate-500"
-                  }`}
+                  className={`text-[10px] mono uppercase ${isDark ? "text-slate-400" : "text-slate-500"}`}
                 >
                   {p.type}
                 </span>
                 <span className={`text-[10px] mono ml-auto ${muted}`}>#{idx}</span>
               </div>
 
-              {/* Proposal body */}
-              <div className={`text-xs space-y-1 mono`}>
+              <div className="text-xs space-y-1 mono">
                 {p.type === "merge" && (
                   <>
                     <div className={isDark ? "text-slate-300" : "text-slate-700"}>
-                      <span className={muted}>keep:</span> {p.keep}
+                      <span className={muted}>keep:</span>
+                      <div className="mt-0.5">
+                        {p.keep && (
+                          <MemoryRef id={p.keep} snap={snapshots[p.keep]} isDark={isDark} />
+                        )}
+                      </div>
                     </div>
                     <div className={isDark ? "text-slate-300" : "text-slate-700"}>
-                      <span className={muted}>absorb:</span> {(p.absorb ?? []).join(", ")}
+                      <span className={muted}>absorb:</span>
+                      <RefList ids={p.absorb ?? []} snapshots={snapshots} isDark={isDark} />
                     </div>
                     {p.rewriteContent && (
                       <div
-                        className={`mt-1 p-2 rounded ${
-                          isDark ? "bg-slate-950/60 text-slate-300" : "bg-white text-slate-700"
-                        } text-[11px]`}
+                        className={`mt-1 p-2 rounded ${isDark ? "bg-slate-950/60 text-slate-300" : "bg-white text-slate-700"} text-[11px]`}
                       >
                         → {p.rewriteContent}
                       </div>
@@ -601,17 +582,28 @@ function ReasoningSection({ run, isDark }: { run: ConsolidationRun; isDark: bool
                 {p.type === "supersede" && (
                   <>
                     <div className={isDark ? "text-slate-300" : "text-slate-700"}>
-                      <span className={muted}>newer:</span> {p.newer}
+                      <span className={muted}>newer:</span>
+                      <div className="mt-0.5">
+                        {p.newer && (
+                          <MemoryRef id={p.newer} snap={snapshots[p.newer]} isDark={isDark} />
+                        )}
+                      </div>
                     </div>
                     <div className={isDark ? "text-slate-300" : "text-slate-700"}>
-                      <span className={muted}>older:</span> {(p.older ?? []).join(", ")}
+                      <span className={muted}>older:</span>
+                      <RefList ids={p.older ?? []} snapshots={snapshots} isDark={isDark} />
                     </div>
                   </>
                 )}
                 {p.type === "prune" && (
                   <>
                     <div className={isDark ? "text-slate-300" : "text-slate-700"}>
-                      <span className={muted}>memoryId:</span> {p.memoryId}
+                      <span className={muted}>memoryId:</span>
+                      <div className="mt-0.5">
+                        {p.memoryId && (
+                          <MemoryRef id={p.memoryId} snap={snapshots[p.memoryId]} isDark={isDark} />
+                        )}
+                      </div>
                     </div>
                     {p.reason && (
                       <div className={isDark ? "text-slate-400" : "text-slate-600"}>
@@ -622,7 +614,6 @@ function ReasoningSection({ run, isDark }: { run: ConsolidationRun; isDark: bool
                 )}
               </div>
 
-              {/* Judge rationale */}
               {d && (
                 <div
                   className={`mt-2 pt-2 border-t text-[11px] ${
@@ -653,6 +644,28 @@ function ReasoningSection({ run, isDark }: { run: ConsolidationRun; isDark: bool
   );
 }
 
+function RefList({
+  ids,
+  snapshots,
+  isDark,
+}: {
+  ids: string[];
+  snapshots: Record<string, { content: string; segment: string; tier: string }>;
+  isDark: boolean;
+}) {
+  const muted = isDark ? "text-slate-500" : "text-slate-400";
+  if (ids.length === 0) return <span className={muted}>(none)</span>;
+  return (
+    <div className="space-y-1 mt-0.5">
+      {ids.map((id) => (
+        <div key={id}>
+          <MemoryRef id={id} snap={snapshots[id]} isDark={isDark} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SummaryStat({
   label,
   value,
@@ -672,6 +685,45 @@ function SummaryStat({
       >
         {label}
       </div>
+    </div>
+  );
+}
+
+function MemoryRef({
+  id,
+  snap,
+  isDark,
+}: {
+  id: string;
+  snap: { content: string; segment: string; tier: string } | undefined;
+  isDark: boolean;
+}) {
+  const muted = isDark ? "text-slate-500" : "text-slate-400";
+  const idColor = isDark ? "text-slate-500" : "text-slate-400";
+  const contentColor = isDark ? "text-slate-200" : "text-slate-800";
+  const tagColor = isDark ? "text-sky-400" : "text-sky-600";
+
+  if (!snap) {
+    return (
+      <span className={`text-[11px] mono ${idColor}`}>
+        {id} <span className={muted}>· (no snapshot)</span>
+      </span>
+    );
+  }
+
+  return (
+    <div
+      className={`rounded border px-2 py-1.5 ${
+        isDark ? "bg-slate-950/40 border-slate-800/80" : "bg-white border-slate-200"
+      }`}
+    >
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <span className={`text-[10px] mono ${idColor}`}>{id}</span>
+        <span className={`text-[9px] mono uppercase ${tagColor}`}>
+          {snap.tier}/{snap.segment}
+        </span>
+      </div>
+      <div className={`text-[11px] ${contentColor}`}>{snap.content}</div>
     </div>
   );
 }

@@ -404,6 +404,10 @@ export async function runConsolidation(deps: ConsolidationDeps): Promise<{
       }
     }
 
+    const memorySnapshots = Object.fromEntries(
+      memories.map((m) => [m.memoryId, { content: m.content, segment: m.segment, tier: m.tier }]),
+    );
+
     await convex.mutation(api.consolidation.updateRun, {
       runId,
       status: "completed",
@@ -415,6 +419,7 @@ export async function runConsolidation(deps: ConsolidationDeps): Promise<{
         challenges,
         decisions,
         applied,
+        memorySnapshots,
       }),
     });
     await convex.mutation(api.memoryEvents.emit, {
