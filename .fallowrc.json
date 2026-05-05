@@ -2,7 +2,6 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": ["apps/worker/src/index.ts", "apps/dashboard/src/main.tsx", "packages/shared/src/index.ts"],
   "ignorePatterns": [
-    "server/**",
     "scripts/**",
     "convex/**",
     "apps/worker/worker-configuration.d.ts"
