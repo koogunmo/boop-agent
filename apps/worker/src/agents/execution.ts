@@ -11,6 +11,7 @@ import { buildComposioTools } from "@/lib/composio-tools";
 import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
 import { extractAccounts, serializeToolResult, type ToolCallLogger } from "@/lib/tool-logger";
 import { createWebTools } from "@/lib/web-tools";
+import { createDateTimeTool } from "@/tools/datetime";
 import { createDraftStagingTools } from "@/tools/drafts";
 
 const EXECUTION_SYSTEM = `You are a focused background worker for the user.
@@ -175,6 +176,7 @@ export class BoopExecutionAgent extends Agent<Env> {
       ...webTools,
       ...draftTools,
       ...integrationTools,
+      ...createDateTimeTool(),
     };
 
     let buffer = "";
