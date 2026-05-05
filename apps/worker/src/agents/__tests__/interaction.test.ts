@@ -217,7 +217,7 @@ describe("BoopInteractionAgent DO", () => {
     expect(body.reply).toContain("Try again");
   });
 
-  it("returns '(no reply)' when LLM returns empty text", async () => {
+  it("returns fallback when LLM returns empty text", async () => {
     const convex = mockConvex([]);
     const stub = await getStub("t-empty");
     await injectMocksIntoDO(stub, convex, "");
@@ -229,7 +229,7 @@ describe("BoopInteractionAgent DO", () => {
     });
 
     const body = (await res.json()) as { reply: string };
-    expect(body.reply).toBe("(no reply)");
+    expect(body.reply).toBe("Hmm — got tangled up there. Want to try that again?");
   });
 
   it("broadcast is callable without clients", async () => {
