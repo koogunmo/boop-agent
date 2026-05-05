@@ -2,6 +2,7 @@ import { api } from "@boop/convex";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
+import { EmbeddingBanner } from "@/components/EmbeddingBanner";
 import MemoryGraphView from "@/components/MemoryGraphView";
 
 type MemoryRecord = NonNullable<FunctionReturnType<typeof api.memoryRecords.list>>[number];
@@ -94,6 +95,7 @@ export function MemoryPanel({ isDark }: { isDark: boolean }) {
 
   return (
     <div className="flex flex-col h-full -m-5">
+      <EmbeddingBanner isDark={isDark} />
       {/* Toolbar */}
       <div
         className={`shrink-0 border-b px-5 py-3 flex flex-wrap items-center gap-3 ${

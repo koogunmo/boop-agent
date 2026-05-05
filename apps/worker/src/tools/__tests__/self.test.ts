@@ -31,9 +31,13 @@ const toolOpts = {
 describe("get_config", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("returns JSON config with model field from env", async () => {
+  it("returns JSON config with userTimezone when explicitly set", async () => {
     const convex = mockConvex();
-    convex.query.mockResolvedValue(null);
+    convex.query.mockImplementation((_fn: unknown, args: unknown) => {
+      const a = args as { key: string };
+      if (a.key === "user_timezone") return "America/Chicago";
+      return null;
+    });
     const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
 
     const result = await tools.get_config.execute!({}, toolOpts);
@@ -43,6 +47,9 @@ describe("get_config", () => {
         model: z.string(),
         envDefault: z.string(),
         availableModels: z.array(z.string()),
+        userTimezone: z.string().nullable(),
+        timezoneFallback: z.string().nullable(),
+        currentLocalTime: z.string(),
         composioEnabled: z.boolean(),
         embeddingsEnabled: z.boolean(),
         sendblueEnabled: z.boolean(),
@@ -50,8 +57,21 @@ describe("get_config", () => {
       .parse(JSON.parse(z.string().parse(result)));
 
     expect(config.model).toBe("workers-ai/@cf/moonshotai/kimi-k2.6");
-    expect(config.composioEnabled).toBe(true);
-    expect(config.sendblueEnabled).toBe(true);
+    expect(config.userTimezone).toBe("America/Chicago");
+    expect(config.timezoneFallback).toBeNull();
+    expect(config.currentLocalTime).toMatch(/\d{4}/);
+  });
+
+  it("returns timezoneFallback when no timezone set", async () => {
+    const convex = mockConvex();
+    convex.query.mockResolvedValue(null);
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = await tools.get_config.execute!({}, toolOpts);
+    const config = JSON.parse(z.string().parse(result));
+    expect(config.userTimezone).toBeNull();
+    expect(config.timezoneFallback).toMatch(/\w+\/\w+|UTC/);
+    expect(config.currentLocalTime).toMatch(/\d{4}/);
   });
 
   it("uses stored model from settings when available and known", async () => {
@@ -315,5 +335,53 @@ describe("inspect_toolkit", () => {
     expect(result).toContain("Post to a channel");
     expect(result).toContain("List Channels");
     expect(client.listToolsForToolkit).toHaveBeenCalledWith("slack");
+  });
+});
+
+describe("set_timezone", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("stores IANA timezone in settings", async () => {
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(await tools.set_timezone.execute!({ timezone: "America/New_York" }, toolOpts));
+
+    expect(result).toContain("America/New_York");
+    expect(convex.mutation).toHaveBeenCalledOnce();
+    expect(convex.mutation.mock.calls[0]![1]).toMatchObject({
+      key: "user_timezone",
+      value: "America/New_York",
+    });
+  });
+
+  it("rejects invalid timezone", async () => {
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(await tools.set_timezone.execute!({ timezone: "Mars/Olympus_Mons" }, toolOpts));
+
+    expect(result).toContain("not a valid");
+    expect(convex.mutation).not.toHaveBeenCalled();
+  });
+
+  it("accepts common aliases like 'Eastern' or 'Pacific'", async () => {
+    const convex = mockConvex();
+    const tools = createSelfTools({ convex: cvx(convex), env: testEnv() });
+
+    const result = z
+      .string()
+      .parse(await tools.set_timezone.execute!({ timezone: "Eastern" }, toolOpts));
+
+    expect(result).toContain("America/New_York");
+    expect(convex.mutation).toHaveBeenCalledOnce();
+    expect(convex.mutation.mock.calls[0]![1]).toMatchObject({
+      key: "user_timezone",
+      value: "America/New_York",
+    });
   });
 });

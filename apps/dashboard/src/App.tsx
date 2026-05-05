@@ -7,6 +7,7 @@ import {
   DashboardSquare01Icon,
   Link04Icon,
   MachineRobotIcon,
+  Settings02Icon,
   WorkflowCircle03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -19,6 +20,7 @@ import { ConsolidationPanel } from "@/components/ConsolidationPanel";
 import { DashboardPanel } from "@/components/DashboardPanel";
 import { EventsPanel } from "@/components/EventsPanel";
 import { MemoryPanel } from "@/components/MemoryPanel";
+import { SettingsPanel } from "@/components/SettingsPanel";
 import { useSocket } from "@/lib/useSocket";
 
 type View =
@@ -28,7 +30,8 @@ type View =
   | "memory"
   | "events"
   | "consolidation"
-  | "connections";
+  | "connections"
+  | "settings";
 
 type Theme = "dark" | "light";
 
@@ -40,6 +43,7 @@ const NAV_ICONS: Record<View, typeof DashboardSquare01Icon> = {
   events: Activity01Icon,
   consolidation: ArrowShrink02Icon,
   connections: Link04Icon,
+  settings: Settings02Icon,
 };
 
 const NAV: { id: View; label: string }[] = [
@@ -50,6 +54,7 @@ const NAV: { id: View; label: string }[] = [
   { id: "events", label: "Events" },
   { id: "consolidation", label: "Consolidation" },
   { id: "connections", label: "Connections" },
+  { id: "settings", label: "Settings" },
 ];
 
 function getStoredTheme(): Theme {
@@ -356,6 +361,7 @@ function Dashboard() {
             {view === "events" && <EventsPanel isDark={isDark} />}
             {view === "consolidation" && <ConsolidationPanel isDark={isDark} />}
             {view === "connections" && <ConnectionsPanel isDark={isDark} />}
+            {view === "settings" && <SettingsPanel isDark={isDark} />}
           </div>
         </main>
       </div>

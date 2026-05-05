@@ -70,6 +70,14 @@ export const broadcastEventSchema = z.discriminatedUnion("event", [
     event: z.literal("memory.cleaned"),
     data: z.object({ scanned: z.number(), archived: z.number(), pruned: z.number() }),
   }),
+  z.object({
+    event: z.literal("memory.reembed.progress"),
+    data: z.object({ embedded: z.number(), failed: z.number(), memoryId: z.string() }),
+  }),
+  z.object({
+    event: z.literal("memory.reembed.done"),
+    data: z.object({ embedded: z.number(), failed: z.number() }),
+  }),
 ]);
 
 type BroadcastEvent = z.infer<typeof broadcastEventSchema>;

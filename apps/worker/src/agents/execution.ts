@@ -207,11 +207,6 @@ export class BoopExecutionAgent extends Agent<Env> {
         onChunk: async ({ chunk }) => {
           if (chunk.type === "text-delta") {
             buffer += chunk.text;
-            await convex.mutation(api.agents.addLog, {
-              agentId,
-              logType: "text",
-              content: chunk.text,
-            });
           } else if (chunk.type === "tool-call") {
             const accounts = extractAccounts(chunk.input);
             log(`codemode: ${chunk.toolName}${accounts.length ? ` [${accounts.join(", ")}]` : ""}`);
@@ -238,6 +233,14 @@ export class BoopExecutionAgent extends Agent<Env> {
 
       await stream.consumeStream();
       buffer = await stream.text;
+
+      if (buffer) {
+        await convex.mutation(api.agents.addLog, {
+          agentId,
+          logType: "text",
+          content: buffer,
+        });
+      }
     } catch (err) {
       status = this.abortController?.signal.aborted ? "cancelled" : "failed";
       if (err instanceof Error) {

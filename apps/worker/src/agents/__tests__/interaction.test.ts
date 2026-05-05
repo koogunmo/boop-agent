@@ -133,7 +133,7 @@ describe("BoopInteractionAgent DO", () => {
     const body = (await res.json()) as { reply: string };
     expect(body.reply).toBe("mocked reply");
 
-    expect(convex.query).toHaveBeenCalledTimes(2);
+    expect(convex.query).toHaveBeenCalledTimes(3);
     expect(convex.mutation).toHaveBeenCalledTimes(3);
 
     expect(convex.mutation.mock.calls[0]![1]).toMatchObject({
@@ -178,8 +178,8 @@ describe("BoopInteractionAgent DO", () => {
       body: JSON.stringify({ conversationId: "test:hist", content: "second" }),
     });
 
-    // Verify convex was queried for history + settings
-    expect(convex.query).toHaveBeenCalledTimes(2);
+    // Verify convex was queried for history + settings + timezone
+    expect(convex.query).toHaveBeenCalledTimes(3);
     // Verify 3 mutations: user save + usage record + assistant save
     expect(convex.mutation).toHaveBeenCalledTimes(3);
   });
@@ -258,10 +258,10 @@ describe("BoopInteractionAgent DO", () => {
           },
         };
         const original = getServerByName;
-        // biome-ignore lint/suspicious/noExplicitAny: mock needs to match overloaded getServerByName signature
         vi.spyOn(partyserver, "getServerByName").mockImplementation(
-          async (ns: any, name: string) => {
-            if (name === "default") return mockStub as any;
+          // @ts-expect-error: getServerByName generic over Server<Env> can't be satisfied with a partial stub
+          async (ns, name) => {
+            if (name === "default") return mockStub;
             return original(ns, name);
           },
         );

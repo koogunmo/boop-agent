@@ -3,32 +3,33 @@ import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { Cron } from "croner";
 import { z } from "zod";
+import { formatLocalTime } from "@/lib/timezone";
 import { randomId } from "@/memory/types";
 
 interface AutomationToolDeps {
   convex: ConvexHttpClient;
   conversationId: string;
+  userTimezone?: string;
   schedule?: (automationId: string, runAt: Date) => Promise<string>;
   cancelSchedule?: (scheduleId: string) => Promise<void>;
 }
 
-function validateSchedule(schedule: string): { valid: boolean; error?: string } {
+export function validateSchedule(
+  schedule: string,
+  timezone?: string,
+): { valid: boolean; error?: string } {
   try {
-    new Cron(schedule, { paused: true }).nextRun();
+    new Cron(schedule, { paused: true, ...(timezone ? { timezone } : {}) }).nextRun();
     return { valid: true };
   } catch (err) {
     return { valid: false, error: String(err) };
   }
 }
 
-function nextRunFor(schedule: string): number | null {
-  try {
-    const c = new Cron(schedule, { paused: true });
-    const next = c.nextRun();
-    return next ? next.getTime() : null;
-  } catch {
-    return null;
-  }
+export function nextRunFor(schedule: string, timezone?: string): number | null {
+  const c = new Cron(schedule, { paused: true, ...(timezone ? { timezone } : {}) });
+  const next = c.nextRun();
+  return next ? next.getTime() : null;
 }
 
 export function createAutomationTools(deps: AutomationToolDeps) {
@@ -38,11 +39,15 @@ export function createAutomationTools(deps: AutomationToolDeps) {
     create_automation: tool({
       description: `Schedule a recurring task. The agent will run the task on the schedule and reply with the result.
 
-Cron expressions (5 fields: min hour day-of-month month day-of-week). Examples:
-  "0 8 * * *"      — every day at 8am
+Cron expressions (5 fields: min hour day-of-month month day-of-week). Write times in the user's LOCAL clock — the runner attaches the user's stored timezone automatically, so do NOT convert to UTC.
+
+Examples:
+  "0 8 * * *"      — every day at 8am (user-local)
   "*/15 * * * *"   — every 15 minutes
-  "0 9 * * 1-5"    — weekdays at 9am
-  "0 18 * * 0"     — Sundays at 6pm
+  "0 9 * * 1-5"    — weekdays at 9am (user-local)
+  "0 18 * * 0"     — Sundays at 6pm (user-local)
+
+If you don't yet know the user's timezone (get_config returns userTimezone=null), ASK before creating any time-of-day automation.
 
 Use this for anything the user says "every [time]" or "remind me" about.`,
       inputSchema: z.object({
@@ -65,13 +70,14 @@ Use this for anything the user says "every [time]" or "remind me" about.`,
           .describe("If true, send the result to this conversation when it runs."),
       }),
       execute: async (args) => {
-        const validation = validateSchedule(args.schedule);
+        const timezone = deps.userTimezone;
+        const validation = validateSchedule(args.schedule, timezone);
         if (!validation.valid) {
           return `Invalid cron expression: ${validation.error}`;
         }
 
         const automationId = randomId("auto");
-        const nextRunAt = nextRunFor(args.schedule);
+        const nextRunAt = nextRunFor(args.schedule, timezone);
 
         await convex.mutation(api.automations.create, {
           automationId,
@@ -79,6 +85,7 @@ Use this for anything the user says "every [time]" or "remind me" about.`,
           task: args.task,
           integrations: args.integrations,
           schedule: args.schedule,
+          ...(timezone ? { timezone } : {}),
           conversationId,
           ...(args.notify ? { notifyConversationId: conversationId } : {}),
           ...(nextRunAt ? { nextRunAt } : {}),
@@ -92,7 +99,12 @@ Use this for anything the user says "every [time]" or "remind me" about.`,
           });
         }
 
-        const nextStr = nextRunAt ? new Date(nextRunAt).toLocaleString() : "unknown";
+        const nextStr =
+          nextRunAt && timezone
+            ? formatLocalTime(new Date(nextRunAt), timezone)
+            : nextRunAt
+              ? new Date(nextRunAt).toLocaleString()
+              : "unknown";
         return `Created automation ${automationId} "${args.name}" — schedule: ${args.schedule}, next run: ${nextStr}.`;
       },
     }),

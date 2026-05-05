@@ -15,20 +15,23 @@ describe("get_current_datetime", () => {
     expect(result).toMatch(/\d{4}/);
   });
 
-  it("returns time in specified timezone", async () => {
+  it("returns time in specified IANA timezone", async () => {
     const tools = createDateTimeTool();
     const result = await tools.get_current_datetime.execute!({ timezone: "Asia/Tokyo" }, toolOpts);
     expect(result).toMatch(/JST|GMT\+9/);
     expect(result).toContain("UTC:");
   });
 
-  it("returns time in US Eastern timezone", async () => {
+  it("resolves alias 'eastern' to America/New_York", async () => {
     const tools = createDateTimeTool();
-    const result = await tools.get_current_datetime.execute!(
-      { timezone: "America/New_York" },
-      toolOpts,
-    );
+    const result = await tools.get_current_datetime.execute!({ timezone: "eastern" }, toolOpts);
     expect(result).toMatch(/EDT|EST/);
+  });
+
+  it("resolves city alias 'tokyo' to Asia/Tokyo", async () => {
+    const tools = createDateTimeTool();
+    const result = await tools.get_current_datetime.execute!({ timezone: "tokyo" }, toolOpts);
+    expect(result).toMatch(/JST|GMT\+9/);
   });
 
   it("includes day of week", async () => {

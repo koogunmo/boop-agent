@@ -8,6 +8,8 @@ import { type Connection, type ConnectionContext, getServerByName } from "partys
 import { z } from "zod";
 import { createComposioClient } from "@/lib/composio";
 import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
+import { getEmbeddingStatus, startReembed } from "@/lib/reembed";
+import { getUserTimezone } from "@/lib/timezone";
 import { cleanMemories } from "@/memory/clean";
 import { extractAndStore } from "@/memory/extract";
 import { randomId } from "@/memory/types";
@@ -210,7 +212,7 @@ export class BoopInteractionAgent extends Agent<Env> {
     connection.send(JSON.stringify({ event: "hello", data: { ok: true }, at: Date.now() }));
   }
 
-  onRequest(request: Request): Response | Promise<Response> {
+  async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
     if (
@@ -244,6 +246,16 @@ export class BoopInteractionAgent extends Agent<Env> {
 
     if (url.pathname === "/trigger/backfill" && request.method === "POST") {
       return this.handleBackfillRequest();
+    }
+
+    if (url.pathname === "/trigger/embedding-status" && request.method === "GET") {
+      const status = await getEmbeddingStatus(this.convex, this.env);
+      return Response.json(status);
+    }
+
+    if (url.pathname === "/trigger/reembed" && request.method === "POST") {
+      const result = startReembed(this.convex, this.env, this.broadcastEvent.bind(this));
+      return Response.json(result, { status: result.started ? 200 : 409 });
     }
 
     return new Response("not found", { status: 404 });
@@ -348,8 +360,10 @@ export class BoopInteractionAgent extends Agent<Env> {
 
   async runAutomation(payload: { automationId: string }): Promise<void> {
     try {
+      const userTimezone = await getUserTimezone(this.convex);
       const nextScheduleId = await runAutomationTask({
         automationId: payload.automationId,
+        userTimezone,
         env: this.env,
         convex: this.convex,
         broadcast: this.broadcastEvent.bind(this),
@@ -406,7 +420,7 @@ export class BoopInteractionAgent extends Agent<Env> {
     return this.env.MODEL_DISPATCHER;
   }
 
-  private async buildTools(conversationId: string, turnId: string) {
+  private async buildTools(conversationId: string, turnId: string, userTimezone: string) {
     const composioClient = createComposioClient(this.env);
     let connectedSlugs: string[] | undefined;
     if (composioClient) {
@@ -434,6 +448,7 @@ export class BoopInteractionAgent extends Agent<Env> {
       ...createSpawnTools({ ...deps, availableIntegrations: connectedSlugs }),
       ...createAutomationTools({
         ...deps,
+        userTimezone,
         schedule: (automationId: string, runAt: Date) =>
           this.schedule(runAt, "runAutomation", { automationId }).then((s) => s.id),
         cancelSchedule: (scheduleId: string) => this.cancelSchedule(scheduleId).then(() => {}),
@@ -471,7 +486,8 @@ export class BoopInteractionAgent extends Agent<Env> {
     this.broadcastEvent("user_message", { conversationId, content });
 
     try {
-      const tools = await this.buildTools(conversationId, turnId);
+      const userTimezone = await getUserTimezone(this.convex);
+      const tools = await this.buildTools(conversationId, turnId, userTimezone);
       const turnStart = Date.now();
 
       const modelId = await this.getRuntimeModel();

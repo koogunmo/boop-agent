@@ -4,6 +4,7 @@ import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import { createComposioClient, FEATURED_SLUGS } from "@/lib/composio";
 import { embeddingsAvailable } from "@/lib/embeddings";
+import { describeUserNow, formatLocalTime, resolveTimezoneInput } from "@/lib/timezone";
 
 const KNOWN_MODELS = new Set<string>([
   "workers-ai/@cf/moonshotai/kimi-k2.6",
@@ -34,6 +35,11 @@ function resolveModelInput(input: string): string | null {
   return MODEL_ALIASES[lower] ?? null;
 }
 
+const SETTINGS = {
+  model: "model",
+  userTimezone: "user_timezone",
+} as const;
+
 interface SelfToolDeps {
   convex: ConvexHttpClient;
   env: Env;
@@ -49,15 +55,10 @@ export function createSelfTools(deps: SelfToolDeps) {
         "Return Boop's runtime configuration: which Claude model it's using, which integrations are loaded, and basic env info. Use when the user asks 'what model are you?', 'what version?', or anything about the agent itself.",
       inputSchema: z.object({}),
       execute: async () => {
-        const MODEL_KEY = "model";
-        let storedModel: string | null = null;
-        try {
-          storedModel = await convex.query(api.settings.get, {
-            key: MODEL_KEY,
-          });
-        } catch {
-          // settings query may fail if table is empty
-        }
+        const [storedModel, tzInfo] = await Promise.all([
+          convex.query(api.settings.get, { key: SETTINGS.model }),
+          describeUserNow(convex),
+        ]);
 
         const model = storedModel && KNOWN_MODELS.has(storedModel) ? storedModel : env.BOOP_MODEL;
 
@@ -65,6 +66,9 @@ export function createSelfTools(deps: SelfToolDeps) {
           model,
           envDefault: env.BOOP_MODEL,
           availableModels: [...KNOWN_MODELS],
+          userTimezone: tzInfo.isExplicit ? tzInfo.timezone : null,
+          timezoneFallback: tzInfo.isExplicit ? null : tzInfo.timezone,
+          currentLocalTime: tzInfo.now,
           composioEnabled: Boolean(env.COMPOSIO_API_KEY),
           embeddingsEnabled: embeddingsAvailable(env),
           sendblueEnabled: Boolean(env.SENDBLUE_API_KEY),
@@ -96,10 +100,35 @@ Cost note (approximate, per 1M output tokens): Opus 4.7 ≈ $75, Sonnet 4.6 ≈ 
           return `Unknown model "${args.model}". Try one of: ${[...KNOWN_MODELS].join(", ")} or aliases ${Object.keys(MODEL_ALIASES).join(", ")}.`;
         }
         await convex.mutation(api.settings.set, {
-          key: "model",
+          key: SETTINGS.model,
           value: resolved,
         });
         return `Model override set to ${resolved}. Next agent run (interaction or sub-agent) will use it. This current turn keeps the previous model.`;
+      },
+    }),
+
+    set_timezone: tool({
+      description: `Save the user's timezone so Boop can reason about deadlines, "today", "9am tomorrow", and other local-time references correctly. Accepts an IANA timezone ID (e.g. "America/Chicago", "Europe/London") or a friendly alias ("central", "PT", "Dallas", "Tokyo", "UTC", etc.).
+
+Use when the user tells you their timezone or location ("I'm in Dallas", "use central time", "I'm in London"), or proactively after asking when get_config returns a null userTimezone and you need local-time context.`,
+      inputSchema: z.object({
+        timezone: z
+          .string()
+          .describe(
+            'Timezone the user just told you. IANA format like "America/New_York" or alias like "eastern" / "Dallas".',
+          ),
+      }),
+      execute: async (args) => {
+        const resolved = resolveTimezoneInput(args.timezone);
+        if (!resolved) {
+          return `"${args.timezone}" is not a valid timezone or alias. Pass a canonical IANA ID like "America/Chicago" / "Europe/London" / "Asia/Tokyo", or a friendly name like "central" / "pacific" / "London" / "Tokyo".`;
+        }
+        await convex.mutation(api.settings.set, {
+          key: SETTINGS.userTimezone,
+          value: resolved,
+        });
+        const now = formatLocalTime(new Date(), resolved);
+        return `User timezone set to ${resolved}. Local time there is now ${now}.`;
       },
     }),
 

@@ -1,4 +1,5 @@
 import { api } from "@boop/convex";
+import { mergeTextLogs as mergeLogs } from "@boop/shared";
 import { useQuery } from "convex/react";
 import { useState } from "react";
 import { BrailleIndicator, IntegrationLogo, prettyToolName } from "@/lib/branding";
@@ -185,7 +186,8 @@ function AgentDetail({
   isDark: boolean;
 }) {
   const agent = useQuery(api.agents.get, { agentId });
-  const logs = useQuery(api.agents.getLogs, { agentId, limit: 500 });
+  const rawLogs = useQuery(api.agents.getLogs, { agentId, limit: 500 });
+  const logs = rawLogs ? mergeLogs(rawLogs) : rawLogs;
   const [requestOpen, setRequestOpen] = useState(false);
   const [responseOpen, setResponseOpen] = useState(false);
 
@@ -420,6 +422,19 @@ function AgentDetail({
   );
 }
 
+function formatLogContent(content: string, logType: string): string {
+  if (logType !== "tool_use" && logType !== "tool_result") return content;
+  try {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (typeof parsed.code === "string") {
+      return parsed.code;
+    }
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return content;
+  }
+}
+
 function TimelineRow({
   log,
   isLast,
@@ -508,7 +523,7 @@ function TimelineRow({
                   : "text-slate-600"
           }`}
         >
-          {log.content.slice(0, 600)}
+          {formatLogContent(log.content, log.logType)}
         </p>
       </div>
     </div>

@@ -65,7 +65,7 @@ function mockProvider(model: LanguageModel) {
   return (_modelId: string) => model;
 }
 
-export function testEnv(overrides: Record<string, string> = {}): Env {
+export function testEnv(overrides: Partial<Record<keyof Env, unknown>> = {}): Env {
   return {
     SENDBLUE_API_KEY: "test-key",
     SENDBLUE_API_SECRET: "test-secret",
@@ -85,7 +85,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     COMPOSIO_USER_ID: "boop-default",
     SERPER_API_KEY: "test-serper-key",
     ...overrides,
-  } satisfies Record<string, string> as unknown as Env;
+  } as Env;
 }
 
 export function cvx(mock: MockConvex): import("convex/browser").ConvexHttpClient {

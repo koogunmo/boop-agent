@@ -180,6 +180,69 @@ export const setLifecycle = mutation({
   },
 });
 
+export const embeddingStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db
+      .query("memoryRecords")
+      .withIndex("by_lifecycle", (q) => q.eq("lifecycle", "active"))
+      .order("desc")
+      .take(5000);
+    let withEmbedding = 0;
+    let withoutEmbedding = 0;
+    for (const m of all) {
+      if (m.embedding && m.embedding.length > 0) withEmbedding++;
+      else withoutEmbedding++;
+    }
+    return {
+      total: all.length,
+      withEmbedding,
+      withoutEmbedding,
+      truncated: all.length === 5000,
+    };
+  },
+});
+
+export const listUnembeddedPage = query({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    pageSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query("memoryRecords")
+      .withIndex("by_lifecycle", (q) => q.eq("lifecycle", "active"))
+      .order("desc")
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: args.pageSize ?? 50,
+      });
+    return {
+      page: result.page
+        .filter((m) => !m.embedding || m.embedding.length === 0)
+        .map((m) => ({ memoryId: m.memoryId, content: m.content })),
+      isDone: result.isDone,
+      continueCursor: result.continueCursor,
+    };
+  },
+});
+
+export const setEmbedding = mutation({
+  args: {
+    memoryId: v.string(),
+    embedding: v.array(v.float64()),
+  },
+  handler: async (ctx, args) => {
+    const mem = await ctx.db
+      .query("memoryRecords")
+      .withIndex("by_memory_id", (q) => q.eq("memoryId", args.memoryId))
+      .unique();
+    if (!mem) return null;
+    await ctx.db.patch(mem._id, { embedding: args.embedding });
+    return mem._id;
+  },
+});
+
 const COUNTS_SCAN_LIMIT = 5000;
 
 export const countsByTier = query({

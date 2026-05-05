@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { cvx, mockConvex } from "@/lib/test-helpers";
-import { createAutomationTools } from "@/tools/automations";
+import { createAutomationTools, nextRunFor, validateSchedule } from "@/tools/automations";
 
 const CONV_ID = "test:conv";
 
@@ -41,6 +41,31 @@ describe("create_automation", () => {
       schedule: "0 8 * * *",
       conversationId: CONV_ID,
       notifyConversationId: CONV_ID,
+    });
+  });
+
+  it("stores timezone on the automation when provided", async () => {
+    const convex = mockConvex();
+    const tools = createAutomationTools({
+      convex: cvx(convex),
+      conversationId: CONV_ID,
+      userTimezone: "America/Chicago",
+    });
+
+    await tools.create_automation.execute!(
+      {
+        name: "central digest",
+        schedule: "0 8 * * *",
+        task: "Summarize emails",
+        integrations: [],
+        notify: false,
+      },
+      toolOpts,
+    );
+
+    expect(convex.mutation).toHaveBeenCalledOnce();
+    expect(convex.mutation.mock.calls[0]![1]).toMatchObject({
+      timezone: "America/Chicago",
     });
   });
 
@@ -168,5 +193,33 @@ describe("delete_automation", () => {
     );
 
     expect(z.string().parse(result)).toBe("Not found.");
+  });
+});
+
+describe("validateSchedule", () => {
+  it("validates a cron expression without timezone", () => {
+    expect(validateSchedule("0 8 * * *").valid).toBe(true);
+  });
+
+  it("validates with a timezone", () => {
+    expect(validateSchedule("0 8 * * *", "America/New_York").valid).toBe(true);
+  });
+
+  it("rejects invalid cron", () => {
+    expect(validateSchedule("not valid").valid).toBe(false);
+  });
+});
+
+describe("nextRunFor", () => {
+  it("computes different next-run times for different timezones", () => {
+    const eastern = nextRunFor("0 8 * * *", "America/New_York")!;
+    const hawaii = nextRunFor("0 8 * * *", "Pacific/Honolulu")!;
+    expect(eastern).toBeGreaterThan(0);
+    expect(hawaii).toBeGreaterThan(0);
+    expect(eastern).not.toBe(hawaii);
+  });
+
+  it("throws on invalid cron", () => {
+    expect(() => nextRunFor("garbage", "UTC")).toThrow();
   });
 });

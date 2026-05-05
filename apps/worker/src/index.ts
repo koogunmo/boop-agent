@@ -80,6 +80,14 @@ const app = new Hono<{ Bindings: Env }>()
     return c.json(result);
   })
 
+  .get("/api/trigger/:method", async (c) => {
+    const method = c.req.param("method");
+    const stub = await getServerByName(c.env.BOOP_AGENT, "default");
+    const res = await stub.fetch(`http://agent/trigger/${method}`, { method: "GET" });
+    const result = await res.json();
+    return c.json(result);
+  })
+
   .post("/api/trigger/:method", async (c) => {
     const method = c.req.param("method");
     const stub = await getServerByName(c.env.BOOP_AGENT, "default");

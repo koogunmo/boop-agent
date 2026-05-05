@@ -1,24 +1,15 @@
 import { api } from "@boop/convex";
 import type { BroadcastFn } from "@boop/shared/events";
 import type { ConvexHttpClient } from "convex/browser";
-import { Cron } from "croner";
 import { getServerByName } from "partyserver";
 import { z } from "zod";
 import { sendImessage } from "@/lib/sendblue";
 import { randomId } from "@/memory/types";
-
-export function nextRunFor(schedule: string): number | null {
-  try {
-    const c = new Cron(schedule, { paused: true });
-    const next = c.nextRun();
-    return next ? next.getTime() : null;
-  } catch {
-    return null;
-  }
-}
+import { nextRunFor } from "@/tools/automations";
 
 interface RunAutomationDeps {
   automationId: string;
+  userTimezone: string;
   env: Env;
   convex: ConvexHttpClient;
   broadcast: BroadcastFn;
@@ -102,7 +93,8 @@ export async function runAutomation(deps: RunAutomationDeps): Promise<string | n
     broadcast("automation_failed", { automationId, runId, error: String(err) });
   }
 
-  const next = nextRunFor(a.schedule);
+  const tz = a.timezone ?? deps.userTimezone;
+  const next = nextRunFor(a.schedule, tz);
   await convex.mutation(api.automations.markRan, {
     automationId,
     lastRunAt: Date.now(),

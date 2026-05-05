@@ -26,8 +26,9 @@ describe("spawn_agent", () => {
       idFromName: vi.fn().mockReturnValue("do-id-123"),
       get: vi.fn().mockReturnValue(mockStub),
     };
-    const env = testEnv();
-    (env as unknown as Record<string, unknown>).EXEC_AGENT = mockExecAgent;
+    const env = testEnv({
+      EXEC_AGENT: mockExecAgent as unknown as Env["EXEC_AGENT"],
+    });
 
     const tools = createSpawnTools({
       convex: cvx(convex),
