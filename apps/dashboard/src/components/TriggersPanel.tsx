@@ -66,12 +66,10 @@ export function TriggersPanel({ isDark }: { isDark: boolean }) {
 
   const [toolkits, setToolkits] = useState<Toolkit[] | null>(null);
   const [triggerTypes, setTriggerTypes] = useState<TriggerType[] | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectedConn, setSelectedConn] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
   const muted = isDark ? "text-slate-500" : "text-slate-400";
-  const cardBg = isDark ? "bg-slate-900/40 border-slate-800/60" : "bg-white border-slate-200";
 
   const loadedRef = useRef(false);
   if (!loadedRef.current) {
@@ -105,15 +103,6 @@ export function TriggersPanel({ isDark }: { isDark: boolean }) {
     const arr = triggersByApp.get(t.appSlug) ?? [];
     arr.push(t);
     triggersByApp.set(t.appSlug, arr);
-  }
-
-  function toggleExpanded(slug: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
   }
 
   async function handleToggle(
@@ -154,196 +143,150 @@ export function TriggersPanel({ isDark }: { isDark: boolean }) {
   const loading = toolkits === null || triggerTypes === null;
   const appsWithTriggers = [...triggersByApp.keys()].filter((slug) => toolkitMap.has(slug));
 
-  function enabledCount(appSlug: string): number {
-    const toolkit = toolkitMap.get(appSlug);
-    const triggers = triggersByApp.get(appSlug) ?? [];
-    if (!toolkit) return 0;
-    let count = 0;
-    for (const conn of toolkit.connections) {
-      for (const trigger of triggers) {
-        const config = configMap.get(`${trigger.slug}:${conn.connectionId}`);
-        if (config?.enabled) count++;
-      }
-    }
-    return count;
-  }
-
   return (
     <div className="flex flex-col h-full -m-5">
       <div
-        className={`shrink-0 border-b px-5 py-3 flex items-center gap-3 ${
-          isDark ? "border-slate-800" : "border-slate-200"
-        }`}
+        className={`shrink-0 border-b px-5 py-3 ${isDark ? "border-slate-800" : "border-slate-200"}`}
       >
         <h2 className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>
           Proactive Triggers
         </h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto debug-scroll p-4 space-y-2">
+      <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className={`h-16 rounded-xl border ${cardBg} shimmer`} />
-            ))}
-          </div>
+          <p className={`text-xs ${muted}`}>Loading…</p>
         ) : appsWithTriggers.length === 0 ? (
-          <div
-            className={`text-sm py-8 text-center ${isDark ? "text-slate-600" : "text-slate-400"}`}
-          >
+          <p className={`text-sm py-4 text-center ${muted}`}>
             No connected integrations with trigger support.
-            <p className={`text-xs mt-2 ${muted}`}>
-              Connect Gmail, Slack, GitHub, or other integrations from the Connections tab.
-            </p>
-          </div>
+          </p>
         ) : (
           appsWithTriggers.map((appSlug) => {
             const toolkit = toolkitMap.get(appSlug);
             const triggers = triggersByApp.get(appSlug) ?? [];
             if (!toolkit) return null;
             const activeConns = toolkit.connections.filter((c) => c.status === "ACTIVE");
-            const isExpanded = expanded.has(appSlug);
-            const active = enabledCount(appSlug);
+            const first = activeConns[0];
+            if (!first) return null;
+
+            const connId = selectedConn[appSlug] ?? first.connectionId;
+            const activeConn = activeConns.find((c) => c.connectionId === connId) ?? first;
 
             return (
-              <div key={appSlug} className={`border rounded-xl overflow-hidden ${cardBg}`}>
-                <button
-                  type="button"
-                  onClick={() => toggleExpanded(appSlug)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left ${
-                    isDark ? "hover:bg-slate-800/40" : "hover:bg-slate-50"
+              <details
+                key={appSlug}
+                className={`group rounded-lg border ${
+                  isDark ? "border-slate-800/60" : "border-slate-200"
+                }`}
+              >
+                <summary
+                  className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm rounded-lg select-none list-none [&::-webkit-details-marker]:hidden ${
+                    isDark
+                      ? "hover:bg-slate-800/40 text-slate-200"
+                      : "hover:bg-slate-50 text-slate-800"
                   }`}
                 >
-                  {toolkit.logoUrl && (
-                    <img src={toolkit.logoUrl} alt="" className="w-5 h-5 rounded" />
-                  )}
                   <span
-                    className={`text-sm font-medium flex-1 ${isDark ? "text-slate-200" : "text-slate-800"}`}
+                    className={`text-[10px] ${muted} transition-transform group-open:rotate-90`}
                   >
-                    {toolkit.displayName}
+                    ▶
                   </span>
-                  {active > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-semibold">
-                      {active} active
-                    </span>
+                  {toolkit.logoUrl && (
+                    <img src={toolkit.logoUrl} alt="" className="w-4 h-4 rounded" />
+                  )}
+                  <span className="flex-1 font-medium">{toolkit.displayName}</span>
+                  {activeConns.length > 1 && (
+                    <span className={`text-[10px] ${muted}`}>{connLabel(activeConn)}</span>
                   )}
                   <span className={`text-[10px] ${muted}`}>
                     {triggers.length} trigger{triggers.length !== 1 ? "s" : ""}
                   </span>
-                  <span
-                    className={`text-xs ${muted} transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                  >
-                    ▶
-                  </span>
-                </button>
+                </summary>
 
-                {isExpanded &&
-                  (() => {
-                    const first = activeConns[0];
-                    if (!first) return null;
-                    const activeConn = selectedConn[appSlug]
-                      ? (activeConns.find((c) => c.connectionId === selectedConn[appSlug]) ?? first)
-                      : first;
+                <div
+                  className={`px-3 pb-2 pt-1 space-y-1 border-t ${
+                    isDark ? "border-slate-800/60" : "border-slate-200"
+                  }`}
+                >
+                  {activeConns.length > 1 && (
+                    <select
+                      value={activeConn.connectionId}
+                      onChange={(e) =>
+                        setSelectedConn((prev) => ({ ...prev, [appSlug]: e.target.value }))
+                      }
+                      className={`text-[10px] mb-1 px-1 py-0.5 rounded border ${
+                        isDark
+                          ? "bg-slate-800 border-slate-700 text-slate-400"
+                          : "bg-slate-50 border-slate-200 text-slate-500"
+                      }`}
+                    >
+                      {activeConns.map((conn) => (
+                        <option key={conn.connectionId} value={conn.connectionId}>
+                          {connLabel(conn)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {triggers.map((trigger) => {
+                    const key = `${trigger.slug}:${activeConn.connectionId}`;
+                    const config = configMap.get(key);
+                    const enabled = config?.enabled ?? false;
+                    const isBusy = busy === key;
 
                     return (
-                      <div
-                        className={`border-t ${isDark ? "border-slate-800/60" : "border-slate-200"}`}
-                      >
-                        {activeConns.length > 1 && (
-                          <div
-                            className={`flex border-b ${isDark ? "border-slate-800/60" : "border-slate-200"}`}
+                      <div key={key} className="flex items-center gap-2 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggle(appSlug, activeConn.connectionId, trigger.slug, enabled)
+                          }
+                          disabled={isBusy}
+                          role="switch"
+                          aria-checked={enabled}
+                          className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors shrink-0 ${
+                            isBusy ? "opacity-50" : ""
+                          } ${enabled ? "bg-emerald-500" : isDark ? "bg-slate-700" : "bg-slate-300"}`}
+                        >
+                          <span
+                            className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+                              enabled ? "translate-x-3" : "translate-x-0.5"
+                            }`}
+                          />
+                        </button>
+                        <span
+                          className={`text-xs flex-1 ${isDark ? "text-slate-300" : "text-slate-700"}`}
+                        >
+                          {trigger.name}
+                        </span>
+                        {enabled && (
+                          <select
+                            value={config?.template ?? defaultTemplate(trigger.slug)}
+                            onChange={(e) =>
+                              setTemplate({
+                                triggerSlug: trigger.slug,
+                                connectedAccountId: activeConn.connectionId,
+                                template: e.target.value,
+                              })
+                            }
+                            className={`text-[9px] px-1 py-0.5 rounded border ${
+                              isDark
+                                ? "bg-slate-800 border-slate-700 text-slate-400"
+                                : "bg-slate-50 border-slate-200 text-slate-500"
+                            }`}
                           >
-                            {activeConns.map((conn) => (
-                              <button
-                                type="button"
-                                key={conn.connectionId}
-                                onClick={() =>
-                                  setSelectedConn((prev) => ({
-                                    ...prev,
-                                    [appSlug]: conn.connectionId,
-                                  }))
-                                }
-                                className={`px-3 py-1.5 text-[10px] transition-colors ${
-                                  conn.connectionId === activeConn.connectionId
-                                    ? isDark
-                                      ? "text-sky-400 border-b-2 border-sky-400"
-                                      : "text-sky-600 border-b-2 border-sky-600"
-                                    : `${muted} hover:${isDark ? "text-slate-300" : "text-slate-600"}`
-                                }`}
-                              >
-                                {connLabel(conn)}
-                              </button>
+                            {Object.entries(TEMPLATE_LABELS).map(([val, label]) => (
+                              <option key={val} value={val}>
+                                {label}
+                              </option>
                             ))}
-                          </div>
+                          </select>
                         )}
-                        <div className="px-4 py-2 space-y-1">
-                          {triggers.map((trigger) => {
-                            const key = `${trigger.slug}:${activeConn.connectionId}`;
-                            const config = configMap.get(key);
-                            const enabled = config?.enabled ?? false;
-                            const isBusy = busy === key;
-
-                            return (
-                              <div key={key} className="flex items-center gap-2 py-1">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleToggle(
-                                      appSlug,
-                                      activeConn.connectionId,
-                                      trigger.slug,
-                                      enabled,
-                                    )
-                                  }
-                                  disabled={isBusy}
-                                  role="switch"
-                                  aria-checked={enabled}
-                                  className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors shrink-0 ${
-                                    isBusy ? "opacity-50" : ""
-                                  } ${enabled ? "bg-emerald-500" : isDark ? "bg-slate-700" : "bg-slate-300"}`}
-                                >
-                                  <span
-                                    className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
-                                      enabled ? "translate-x-3" : "translate-x-0.5"
-                                    }`}
-                                  />
-                                </button>
-                                <span
-                                  className={`text-xs flex-1 ${isDark ? "text-slate-300" : "text-slate-700"}`}
-                                >
-                                  {trigger.name}
-                                </span>
-                                {enabled && (
-                                  <select
-                                    value={config?.template ?? defaultTemplate(trigger.slug)}
-                                    onChange={(e) =>
-                                      setTemplate({
-                                        triggerSlug: trigger.slug,
-                                        connectedAccountId: activeConn.connectionId,
-                                        template: e.target.value,
-                                      })
-                                    }
-                                    className={`text-[9px] mono px-1 py-0.5 rounded border ${
-                                      isDark
-                                        ? "bg-slate-800 border-slate-700 text-slate-400"
-                                        : "bg-slate-50 border-slate-200 text-slate-500"
-                                    }`}
-                                  >
-                                    {Object.entries(TEMPLATE_LABELS).map(([val, label]) => (
-                                      <option key={val} value={val}>
-                                        {label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
                       </div>
                     );
-                  })()}
-              </div>
+                  })}
+                </div>
+              </details>
             );
           })
         )}
