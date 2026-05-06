@@ -22,7 +22,7 @@ async function processInbound(
   const start = Date.now();
   const stopTyping = startTypingLoop(env, fromNumber);
   try {
-    const result = await dispatchToAgent(env.BOOP_AGENT, conversationId, content);
+    const result = await dispatchToAgent(env.BOOP_AGENT, conversationId, content, "user");
 
     if (!result.ok) {
       console.error(`[sendblue] agent error ${result.status}: ${result.error}`);

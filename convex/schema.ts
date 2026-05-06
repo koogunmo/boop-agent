@@ -236,4 +236,16 @@ export default defineSchema({
   })
     .index("by_automation", ["automationId"])
     .index("by_run_id", ["runId"]),
+
+  triggerConfigs: defineTable({
+    triggerSlug: v.string(),
+    connectedAccountId: v.string(),
+    appSlug: v.string(),
+    template: v.string(),
+    enabled: v.boolean(),
+    composioTriggerId: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_slug", ["triggerSlug"])
+    .index("by_connection", ["connectedAccountId"]),
 });

@@ -23,6 +23,7 @@ describe("send_ack", () => {
       conversationId: CONV_ID,
       turnId: "turn_test",
       broadcast,
+      kind: "user",
     });
 
     const result = await tools.send_ack.execute!({ message: "On it!" }, toolOpts);
@@ -49,6 +50,7 @@ describe("send_ack", () => {
       conversationId: CONV_ID,
       turnId: "turn_test",
       broadcast,
+      kind: "user",
     });
 
     const result = await tools.send_ack.execute!({ message: "   " }, toolOpts);
@@ -74,6 +76,7 @@ describe("send_ack", () => {
       conversationId: "sms:+14155551234",
       turnId: "turn_test",
       broadcast,
+      kind: "user",
     });
 
     await tools.send_ack.execute!({ message: "Got it" }, toolOpts);

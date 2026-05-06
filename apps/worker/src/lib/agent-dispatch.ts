@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { MessageKind } from "@/proactive/types";
 
 const agentReply = z.object({ reply: z.string() });
 
@@ -6,6 +7,7 @@ export async function dispatchToAgent<T extends Rpc.DurableObjectBranded>(
   namespace: DurableObjectNamespace<T>,
   conversationId: string,
   content: string,
+  kind: MessageKind,
 ): Promise<{ ok: true; reply: string } | { ok: false; status: number; error: string }> {
   const id = namespace.idFromName(conversationId);
   const stub = namespace.get(id);
@@ -17,7 +19,7 @@ export async function dispatchToAgent<T extends Rpc.DurableObjectBranded>(
         "Content-Type": "application/json",
         "x-partykit-room": conversationId,
       },
-      body: JSON.stringify({ conversationId, content }),
+      body: JSON.stringify({ conversationId, content, kind }),
     }),
   );
 

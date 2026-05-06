@@ -20,6 +20,10 @@ binding = "AI"
 [browser]
 binding = "BROWSER"
 
+[[kv_namespaces]]
+binding = "PROACTIVE_KV"
+id = "proactive-dedup"
+
 [durable_objects]
 bindings = [
   { name = "BOOP_AGENT", class_name = "BoopInteractionAgent" },
@@ -44,3 +48,4 @@ MODEL_PROPOSER = "anthropic/claude-sonnet-4-6"
 MODEL_JUDGE = "anthropic/claude-sonnet-4-6"
 SENDBLUE_FROM_NUMBER = "+16452438873"
 COMPOSIO_USER_ID = "boop-default"
+MODEL_CLASSIFIER = "@cf/meta/llama-3.1-8b-instruct"

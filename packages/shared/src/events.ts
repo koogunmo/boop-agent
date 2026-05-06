@@ -78,6 +78,22 @@ export const broadcastEventSchema = z.discriminatedUnion("event", [
     event: z.literal("memory.reembed.done"),
     data: z.object({ embedded: z.number(), failed: z.number() }),
   }),
+  z.object({
+    event: z.literal("proactive_notice"),
+    data: z.object({ conversationId: z.string(), content: z.string() }),
+  }),
+  z.object({
+    event: z.literal("proactive_classified"),
+    data: z.object({ triggerSlug: z.string(), appSlug: z.string(), important: z.boolean() }),
+  }),
+  z.object({
+    event: z.literal("proactive_dispatched"),
+    data: z.object({ triggerSlug: z.string(), sender: z.string(), subject: z.string() }),
+  }),
+  z.object({
+    event: z.literal("proactive_skipped"),
+    data: z.object({ triggerSlug: z.string(), reason: z.string() }),
+  }),
 ]);
 
 type BroadcastEvent = z.infer<typeof broadcastEventSchema>;

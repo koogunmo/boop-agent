@@ -21,10 +21,10 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
-    "@boop/shared": "workspace:*",
-    "@boop/convex": "workspace:*",
     "@agentic/serper": "^8.4.4",
     "@ai-sdk/openai-compatible": "^2.0.41",
+    "@boop/convex": "workspace:*",
+    "@boop/shared": "workspace:*",
     "@cloudflare/codemode": "^0.3.4",
     "@composio/core": "^0.6.11",
     "@hono/zod-validator": "^0.7.6",
@@ -38,6 +38,7 @@
     "partyserver": "^0.4.1",
     "remove-markdown": "^0.6.3",
     "sendblue": "^3.7.0",
+    "workers-ai-provider": "^3.1.13",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -8,6 +8,7 @@ import { chat } from "@/routes/chat";
 import { composio } from "@/routes/composio";
 import { convex } from "@/routes/convex";
 import { sendblue } from "@/routes/sendblue";
+import { webhooks } from "@/routes/webhooks";
 
 export { BoopExecutionAgent } from "@/agents/execution";
 export { BoopInteractionAgent } from "@/agents/interaction";
@@ -110,7 +111,8 @@ const app = new Hono<{ Bindings: Env }>()
   .route("/api/sendblue", sendblue)
   .route("/api/chat", chat)
   .route("/api/composio", composio)
-  .route("/api/convex", convex);
+  .route("/api/convex", convex)
+  .route("/api/webhooks", webhooks);
 
 export type AppType = typeof app;
 

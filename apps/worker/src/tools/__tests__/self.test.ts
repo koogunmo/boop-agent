@@ -19,6 +19,10 @@ function mockClient(overrides: {
     authorizeToolkit: vi.fn(),
     disconnectToolkit: vi.fn(),
     renameConnection: vi.fn(),
+    createTrigger: vi.fn().mockResolvedValue("trigger_id"),
+    enableTrigger: vi.fn(),
+    disableTrigger: vi.fn(),
+    listTriggerTypes: vi.fn().mockResolvedValue([]),
   } satisfies composioModule.IComposioClient;
 }
 

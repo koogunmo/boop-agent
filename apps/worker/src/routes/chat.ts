@@ -2,10 +2,12 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
 import { dispatchToAgent } from "@/lib/agent-dispatch";
+import { MESSAGE_KINDS } from "@/proactive/types";
 
 const chatBody = z.object({
   conversationId: z.string().min(1),
   content: z.string().min(1),
+  kind: z.enum(MESSAGE_KINDS).default("user"),
 });
 
 const chat = new Hono<{ Bindings: Env }>().post(
@@ -16,8 +18,8 @@ const chat = new Hono<{ Bindings: Env }>().post(
     }
   }),
   async (c) => {
-    const { conversationId, content } = c.req.valid("json");
-    const result = await dispatchToAgent(c.env.BOOP_AGENT, conversationId, content);
+    const { conversationId, content, kind } = c.req.valid("json");
+    const result = await dispatchToAgent(c.env.BOOP_AGENT, conversationId, content, kind);
 
     if (!result.ok) {
       return c.json({ error: result.error }, 500);

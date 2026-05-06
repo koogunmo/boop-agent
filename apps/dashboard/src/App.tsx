@@ -3,6 +3,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import {
   Activity01Icon,
   AiBrain02Icon,
+  Alert02Icon,
   ArrowShrink02Icon,
   DashboardSquare01Icon,
   Link04Icon,
@@ -21,6 +22,7 @@ import { DashboardPanel } from "@/components/DashboardPanel";
 import { EventsPanel } from "@/components/EventsPanel";
 import { MemoryPanel } from "@/components/MemoryPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { TriggersPanel } from "@/components/TriggersPanel";
 import { useSocket } from "@/lib/useSocket";
 
 type View =
@@ -31,6 +33,7 @@ type View =
   | "events"
   | "consolidation"
   | "connections"
+  | "triggers"
   | "settings";
 
 type Theme = "dark" | "light";
@@ -43,6 +46,7 @@ const NAV_ICONS: Record<View, typeof DashboardSquare01Icon> = {
   events: Activity01Icon,
   consolidation: ArrowShrink02Icon,
   connections: Link04Icon,
+  triggers: Alert02Icon,
   settings: Settings02Icon,
 };
 
@@ -54,6 +58,7 @@ const NAV: { id: View; label: string }[] = [
   { id: "events", label: "Events" },
   { id: "consolidation", label: "Consolidation" },
   { id: "connections", label: "Connections" },
+  { id: "triggers", label: "Triggers" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -361,6 +366,7 @@ function Dashboard() {
             {view === "events" && <EventsPanel isDark={isDark} />}
             {view === "consolidation" && <ConsolidationPanel isDark={isDark} />}
             {view === "connections" && <ConnectionsPanel isDark={isDark} />}
+            {view === "triggers" && <TriggersPanel isDark={isDark} />}
             {view === "settings" && <SettingsPanel isDark={isDark} />}
           </div>
         </main>

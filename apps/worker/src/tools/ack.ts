@@ -4,6 +4,7 @@ import { tool } from "ai";
 import type { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import { sendImessage } from "@/lib/sendblue";
+import type { MessageKind } from "@/proactive/types";
 
 interface AckToolDeps {
   convex: ConvexHttpClient;
@@ -11,10 +12,11 @@ interface AckToolDeps {
   conversationId: string;
   turnId: string;
   broadcast: BroadcastFn;
+  kind: MessageKind;
 }
 
 export function createAckTools(deps: AckToolDeps) {
-  const { convex, env, conversationId, turnId, broadcast } = deps;
+  const { convex, env, conversationId, turnId, broadcast, kind } = deps;
 
   return {
     send_ack: tool({
@@ -27,6 +29,10 @@ export function createAckTools(deps: AckToolDeps) {
         const text = args.message.trim();
         if (!text) {
           return "Empty ack skipped.";
+        }
+
+        if (kind === "proactive") {
+          return "Ack skipped (proactive turn).";
         }
 
         if (conversationId.startsWith("sms:")) {

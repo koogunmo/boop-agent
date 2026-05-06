@@ -232,6 +232,32 @@ describe("BoopInteractionAgent DO", () => {
     expect(body.reply).toBe("Hmm — got tangled up there. Want to try that again?");
   });
 
+  it("stores proactive messages with role=system and skips extraction", async () => {
+    const convex = mockConvex([]);
+    const stub = await getStub("t-proactive");
+    await injectMocksIntoDO(stub, convex, "Got it, checking that email.");
+
+    const res = await stub.fetch("http://agent/handle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conversationId: "test:proactive",
+        content: "[proactive notice] Important email from boss",
+        kind: "proactive",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { reply: string };
+    expect(body.reply).toContain("checking that email");
+
+    expect(convex.mutation.mock.calls[0]![1]).toMatchObject({
+      conversationId: "test:proactive",
+      role: "system",
+      content: "[proactive notice] Important email from boss",
+    });
+  });
+
   it("broadcast is callable without clients", async () => {
     const stub = await getStub("t-bc");
     await runInDurableObject<BoopInteractionAgent, void>(

@@ -209,17 +209,23 @@ export interface IComposioClient {
   ): Promise<{ redirectUrl: string | null; connectionId: string }>;
   disconnectToolkit(connectionId: string): Promise<void>;
   renameConnection(connectionId: string, alias: string): Promise<void>;
+  createTrigger(triggerSlug: string, connectedAccountId: string): Promise<string>;
+  enableTrigger(triggerId: string): Promise<void>;
+  disableTrigger(triggerId: string): Promise<void>;
+  listTriggerTypes(
+    appSlugs: string[],
+  ): Promise<Array<{ slug: string; name: string; appSlug: string }>>;
 }
 
 class ComposioClient implements IComposioClient {
   private readonly client: Composio;
   private readonly userId: string;
-  private readonly key: string;
+  private readonly apiKey: string;
 
   constructor(client: Composio, userId: string, apiKey: string) {
     this.client = client;
     this.userId = userId;
-    this.key = apiKey;
+    this.apiKey = apiKey;
   }
 
   get raw(): Composio {
@@ -398,7 +404,7 @@ class ComposioClient implements IComposioClient {
       `https://backend.composio.dev/api/v1/connectedAccounts/${encodeURIComponent(connectionId)}`,
       {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-api-key": this.key },
+        headers: { "Content-Type": "application/json", "x-api-key": this.apiKey },
         body: JSON.stringify({ alias }),
       },
     );
@@ -406,6 +412,36 @@ class ComposioClient implements IComposioClient {
       const text = await res.text();
       throw new Error(`Composio rename failed: ${res.status} ${text}`);
     }
+  }
+
+  async listTriggerTypes(
+    appSlugs: string[],
+  ): Promise<Array<{ slug: string; name: string; appSlug: string }>> {
+    const result = await this.client.triggers.listTypes({ toolkits: appSlugs });
+    const items =
+      (result as { items?: Array<{ slug: string; name: string; toolkit: { slug: string } }> })
+        .items ?? [];
+    return items
+      .filter((t) => appSlugs.includes(t.toolkit.slug))
+      .map((t) => ({ slug: t.slug, name: t.name, appSlug: t.toolkit.slug }));
+  }
+
+  async createTrigger(triggerSlug: string, connectedAccountId: string): Promise<string> {
+    const result = await this.client.triggers.create(this.userId, triggerSlug, {
+      connectedAccountId,
+      triggerConfig: {},
+    });
+    const id = (result as { triggerId?: string }).triggerId;
+    if (!id) throw new Error(`Composio create trigger returned no triggerId for ${triggerSlug}`);
+    return id;
+  }
+
+  async enableTrigger(triggerId: string): Promise<void> {
+    await this.client.triggers.enable(triggerId);
+  }
+
+  async disableTrigger(triggerId: string): Promise<void> {
+    await this.client.triggers.disable(triggerId);
   }
 }
 

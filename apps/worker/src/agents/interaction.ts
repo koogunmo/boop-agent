@@ -9,10 +9,15 @@ import { z } from "zod";
 import { createComposioClient } from "@/lib/composio";
 import { createProvider, gatewayMetadataHeader } from "@/lib/llm";
 import { getEmbeddingStatus, startReembed } from "@/lib/reembed";
+import { sendImessage } from "@/lib/sendblue";
 import { getUserTimezone } from "@/lib/timezone";
 import { cleanMemories } from "@/memory/clean";
 import { extractAndStore } from "@/memory/extract";
 import { randomId } from "@/memory/types";
+import { classifyEvent } from "@/proactive/classify";
+import { runProactivePipeline } from "@/proactive/pipeline";
+import { getTemplate } from "@/proactive/templates/index";
+import { MESSAGE_KINDS, type MessageKind } from "@/proactive/types";
 import { runAutomation as runAutomationTask } from "@/scheduling/automations";
 import { runConsolidation } from "@/scheduling/consolidation";
 import { backfillCosts } from "@/scheduling/cost-backfill";
@@ -153,9 +158,24 @@ matching.
 
 Format: Plain iMessage-friendly text. Markdown sparingly. Keep replies under ~400 chars when you can.`;
 
+const PROACTIVE_ADDENDUM = `
+
+IMPORTANT: This turn is a PROACTIVE NOTIFICATION, not a user message.
+A system watcher detected an important event (email, Slack DM, calendar
+change, etc.) and is asking you to relay it to the user.
+
+Your job: deliver the notification as a concise heads-up.
+- Lead with who/what, then the action or deadline.
+  Example: "Heads up — Alice emailed about the auth PR review, due EOD."
+- Do NOT say "Got it" or acknowledge — you're delivering, not receiving.
+- Do NOT ask clarifying questions about the notice.
+- You CAN offer to help: "Want me to draft a reply?" / "Set a reminder?"
+- Keep it short — this is an interrupt, not a conversation starter.`;
+
 const handleRequestSchema = z.object({
   conversationId: z.string().min(1),
   content: z.string().min(1),
+  kind: z.enum(MESSAGE_KINDS).default("user"),
 });
 
 export class BoopInteractionAgent extends Agent<Env> {
@@ -258,7 +278,50 @@ export class BoopInteractionAgent extends Agent<Env> {
       return Response.json(result, { status: result.started ? 200 : 409 });
     }
 
+    if (url.pathname === "/trigger/proactive" && request.method === "POST") {
+      return this.handleTriggerProactive(request);
+    }
+
     return new Response("not found", { status: 404 });
+  }
+
+  private async handleTriggerProactive(request: Request): Promise<Response> {
+    const parsed = z
+      .object({
+        triggerSlug: z.string().default("TEST_TRIGGER"),
+        connectedAccountId: z.string().default("test"),
+        template: z.enum(["email", "message", "issue", "calendar", "generic"]).default("generic"),
+        data: z.record(z.string(), z.unknown()),
+      })
+      .safeParse(await request.json());
+    if (!parsed.success) return new Response("data required", { status: 400 });
+
+    const template = getTemplate(parsed.data.template);
+    try {
+      const result = await runProactivePipeline({
+        env: this.env,
+        data: parsed.data.data,
+        meta: {
+          trigger_slug: parsed.data.triggerSlug,
+          connected_account_id: parsed.data.connectedAccountId,
+        },
+        template,
+        convex: this.convex,
+        broadcast: this.broadcastEvent.bind(this),
+        classify: classifyEvent,
+        dispatch: async (conversationId, content) => {
+          const reply = await this.handleMessage(conversationId, content, "proactive");
+          if (reply && conversationId.startsWith("sms:")) {
+            await sendImessage(this.env, conversationId.slice(4), reply);
+          }
+          return reply;
+        },
+      });
+      return Response.json(result);
+    } catch (err) {
+      console.error("[trigger/proactive]", err);
+      return Response.json({ error: String(err) }, { status: 500 });
+    }
   }
 
   private async handleBroadcastRequest(request: Request): Promise<Response> {
@@ -277,7 +340,11 @@ export class BoopInteractionAgent extends Agent<Env> {
     if (!parsed.success) {
       return new Response("bad request", { status: 400 });
     }
-    const reply = await this.handleMessage(parsed.data.conversationId, parsed.data.content);
+    const reply = await this.handleMessage(
+      parsed.data.conversationId,
+      parsed.data.content,
+      parsed.data.kind,
+    );
     return Response.json({ reply });
   }
 
@@ -420,7 +487,12 @@ export class BoopInteractionAgent extends Agent<Env> {
     return this.env.MODEL_DISPATCHER;
   }
 
-  private async buildTools(conversationId: string, turnId: string, userTimezone: string) {
+  private async buildTools(
+    conversationId: string,
+    turnId: string,
+    userTimezone: string,
+    kind: MessageKind,
+  ) {
     const composioClient = createComposioClient(this.env);
     let connectedSlugs: string[] | undefined;
     if (composioClient) {
@@ -444,7 +516,7 @@ export class BoopInteractionAgent extends Agent<Env> {
     };
     return {
       ...createMemoryTools(deps),
-      ...createAckTools(deps),
+      ...createAckTools({ ...deps, kind }),
       ...createSpawnTools({ ...deps, availableIntegrations: connectedSlugs }),
       ...createAutomationTools({
         ...deps,
@@ -458,7 +530,11 @@ export class BoopInteractionAgent extends Agent<Env> {
     };
   }
 
-  private async handleMessage(conversationId: string, content: string): Promise<string> {
+  private async handleMessage(
+    conversationId: string,
+    content: string,
+    kind: MessageKind,
+  ): Promise<string> {
     const turnId = randomId("turn");
 
     const history = await this.convex.query(api.messages.recent, {
@@ -476,24 +552,29 @@ export class BoopInteractionAgent extends Agent<Env> {
 
     messages.push({ role: "user", content });
 
+    const inboundRole = kind === "proactive" ? "system" : "user";
     await this.convex.mutation(api.messages.send, {
       conversationId,
-      role: "user",
+      role: inboundRole,
       content,
       turnId,
     });
 
-    this.broadcastEvent("user_message", { conversationId, content });
+    if (kind === "proactive") {
+      this.broadcastEvent("proactive_notice", { conversationId, content });
+    } else {
+      this.broadcastEvent("user_message", { conversationId, content });
+    }
 
     try {
       const userTimezone = await getUserTimezone(this.convex);
-      const tools = await this.buildTools(conversationId, turnId, userTimezone);
+      const tools = await this.buildTools(conversationId, turnId, userTimezone, kind);
       const turnStart = Date.now();
 
       const modelId = await this.getRuntimeModel();
       const result = await generateText({
         model: this.provider(modelId),
-        system: INTERACTION_SYSTEM,
+        system: kind === "proactive" ? INTERACTION_SYSTEM + PROACTIVE_ADDENDUM : INTERACTION_SYSTEM,
         messages,
         tools,
         stopWhen: stepCountIs(10),
@@ -535,15 +616,17 @@ export class BoopInteractionAgent extends Agent<Env> {
 
       this.broadcastEvent("assistant_message", { conversationId, content: reply });
 
-      extractAndStore({
-        env: this.env,
-        convex: this.convex,
-        conversationId,
-        userMessage: content,
-        assistantReply: reply,
-        turnId,
-        broadcast: this.broadcastEvent.bind(this),
-      }).catch((err) => console.error("[interaction] extraction error", err));
+      if (kind !== "proactive") {
+        extractAndStore({
+          env: this.env,
+          convex: this.convex,
+          conversationId,
+          userMessage: content,
+          assistantReply: reply,
+          turnId,
+          broadcast: this.broadcastEvent.bind(this),
+        }).catch((err) => console.error("[interaction] extraction error", err));
+      }
 
       return reply;
     } catch (err) {
