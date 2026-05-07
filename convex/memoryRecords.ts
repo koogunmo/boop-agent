@@ -180,8 +180,6 @@ export const setLifecycle = mutation({
   },
 });
 
-const COUNTS_SCAN_LIMIT = 5000;
-
 export const embeddingStats = query({
   args: {},
   handler: async (ctx) => {
@@ -189,7 +187,7 @@ export const embeddingStats = query({
       .query("memoryRecords")
       .withIndex("by_lifecycle", (q) => q.eq("lifecycle", "active"))
       .order("desc")
-      .take(COUNTS_SCAN_LIMIT);
+      .take(5000);
     let withEmbedding = 0;
     let withoutEmbedding = 0;
     for (const m of all) {
@@ -200,23 +198,11 @@ export const embeddingStats = query({
       total: all.length,
       withEmbedding,
       withoutEmbedding,
-      truncated: all.length === COUNTS_SCAN_LIMIT,
+      truncated: all.length === 5000,
     };
   },
 });
 
-// Cursor-based scan over active memories that yields the unembedded ones.
-// Returns at most `pageSize` rows from the underlying index, and the caller
-// is expected to walk pages via `continueCursor` until `isDone`. A given
-// page may contain fewer unembedded rows than were scanned (the rest had
-// embeddings and were filtered out).
-//
-// Why a cursor rather than a top-N sort by importance: the previous
-// implementation took 5,000 rows per call and filtered in-process, so each
-// pagination step was O(total memories). With the cursor each step is
-// O(pageSize). Re-embed throughput is unchanged (we still process every
-// unembedded row exactly once) but Convex query cost stays bounded as the
-// memory corpus grows.
 export const listUnembeddedPage = query({
   args: {
     cursor: v.optional(v.union(v.string(), v.null())),
@@ -241,9 +227,6 @@ export const listUnembeddedPage = query({
   },
 });
 
-// Patch just the embedding on an existing memory. Avoids re-running upsert
-// (which would touch lastAccessedAt + run supersedes processing) just to
-// back-fill a vector.
 export const setEmbedding = mutation({
   args: {
     memoryId: v.string(),
@@ -259,6 +242,8 @@ export const setEmbedding = mutation({
     return mem._id;
   },
 });
+
+const COUNTS_SCAN_LIMIT = 5000;
 
 export const countsByTier = query({
   args: {},

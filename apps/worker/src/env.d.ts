@@ -1,0 +1,16 @@
+// Secrets not in wrangler.toml — set via `wrangler secret put` or .dev.vars
+declare namespace Cloudflare {
+  interface Env {
+    CF_ACCOUNT_ID: string;
+    CF_GATEWAY_ID: string;
+    // Single CF API token. Required permissions: Workers AI (Read), AI Gateway (Read), Workers Browser Rendering (Edit)
+    CF_API_TOKEN: string;
+    SENDBLUE_API_KEY: string;
+    SENDBLUE_API_SECRET: string;
+    COMPOSIO_API_KEY?: string;
+    SERPER_API_KEY: string;
+    CONVEX_URL: string;
+    // Shared secret for Convex → Worker callbacks. Must also be set in Convex env.
+    CONVEX_WEBHOOK_SECRET: string;
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@boop/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./events": "./src/events.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check --write src/"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  }
+}

@@ -1,7 +1,9 @@
+import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  ...authTables,
   messages: defineTable({
     conversationId: v.string(),
     role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
@@ -115,6 +117,7 @@ export default defineSchema({
   })
     .index("by_conversation", ["conversationId"])
     .index("by_agent", ["agentId"])
+    .index("by_turn", ["turnId"])
     .index("by_source", ["source"]),
 
   agentLogs: defineTable({
@@ -152,16 +155,13 @@ export default defineSchema({
     task: v.string(),
     integrations: v.array(v.string()),
     schedule: v.string(),
-    // IANA timezone the cron expression is evaluated in. Stored at create
-    // time so changing the user's global timezone later doesn't shift
-    // existing automations. Optional for backwards compatibility — pre-TZ
-    // automations fall back to the user's current setting at run time.
     timezone: v.optional(v.string()),
     enabled: v.boolean(),
     conversationId: v.optional(v.string()),
     notifyConversationId: v.optional(v.string()),
     lastRunAt: v.optional(v.number()),
     nextRunAt: v.optional(v.number()),
+    scheduleId: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_automation_id", ["automationId"])
@@ -236,4 +236,16 @@ export default defineSchema({
   })
     .index("by_automation", ["automationId"])
     .index("by_run_id", ["runId"]),
+
+  triggerConfigs: defineTable({
+    triggerSlug: v.string(),
+    connectedAccountId: v.string(),
+    appSlug: v.string(),
+    template: v.string(),
+    enabled: v.boolean(),
+    composioTriggerId: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_slug", ["triggerSlug"])
+    .index("by_connection", ["connectedAccountId"]),
 });

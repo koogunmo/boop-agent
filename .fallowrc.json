@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": ["apps/worker/src/index.ts", "apps/dashboard/src/main.tsx", "packages/shared/src/index.ts"],
+  "ignorePatterns": [
+    "scripts/**",
+    "convex/**",
+    "apps/worker/worker-configuration.d.ts"
+  ],
+  "usedClassMembers": [
+    {
+      "extends": "Agent",
+      "members": [
+        "onStart",
+        "onRequest",
+        "onConnect",
+        "options",
+        "sweepStaleAgents",
+        "cleanMemories",
+        "runConsolidation",
+        "runAutomation",
+        "backfillCosts",
+        "broadcastEvent"
+      ]
+    }
+  ],
+  "rules": {
+    "unused-dependencies": "warn"
+  },
+  "regression": {
+    "baseline": {
+      "totalIssues": 8,
+      "unusedFiles": 0,
+      "unusedExports": 0,
+      "unusedTypes": 0,
+      "unusedDependencies": 3,
+      "unusedDevDependencies": 4,
+      "unusedOptionalDependencies": 0,
+      "unusedEnumMembers": 0,
+      "unusedClassMembers": 0,
+      "unresolvedImports": 0,
+      "unlistedDependencies": 1,
+      "duplicateExports": 0,
+      "circularDependencies": 0,
+      "typeOnlyDependencies": 0,
+      "testOnlyDependencies": 0,
+      "boundaryViolations": 0
+    }
+  }
+}

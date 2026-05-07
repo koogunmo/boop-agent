@@ -4,6 +4,7 @@ build/
 .env
 .env.local
 .env.*.local
+.dev.vars
 *.log
 .DS_Store
 .convex/
@@ -14,6 +15,9 @@ data/
 *.sqlite
 *.sqlite-journal
 .vite/
-debug/dist/
 .cache/
-.tsbuildinfo
+*.tsbuildinfo
+.turbo/
+.types/
+.wrangler/
+.fallow/
